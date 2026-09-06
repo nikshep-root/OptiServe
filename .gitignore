@@ -1,0 +1,14 @@
+# Secrets and local configuration
+.env
+*.env
+
+# Generated build output
+target/
+build/
+
+# IDE metadata
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
