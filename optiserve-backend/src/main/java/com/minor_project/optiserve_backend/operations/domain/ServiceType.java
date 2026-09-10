@@ -65,6 +65,13 @@ public class ServiceType {
         updatedAt = Instant.now();
     }
 
+    public void update(String name, String description, Duration defaultServiceDuration) {
+        this.name = requireText(name, "name");
+        this.description = description;
+        this.defaultServiceDuration = requirePositiveDuration(defaultServiceDuration, "defaultServiceDuration");
+        updatedAt = Instant.now();
+    }
+
     public UUID getId() {
         return id;
     }

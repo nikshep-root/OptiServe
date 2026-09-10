@@ -5,4 +5,6 @@ import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface ResourceRepository extends JpaRepository<Resource, UUID> {
+
+    boolean existsByCompatibleServiceTypes_Id(UUID serviceTypeId);
 }

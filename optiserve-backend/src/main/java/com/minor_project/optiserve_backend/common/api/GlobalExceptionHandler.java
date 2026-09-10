@@ -7,6 +7,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -39,6 +40,20 @@ public class GlobalExceptionHandler {
             HttpMessageNotReadableException exception,
             HttpServletRequest request) {
         return response(HttpStatus.BAD_REQUEST, "Request body is invalid.", request, Map.of());
+    }
+
+    @ExceptionHandler(ResourceNotFoundException.class)
+    ResponseEntity<ApiErrorResponse> handleResourceNotFound(
+            ResourceNotFoundException exception,
+            HttpServletRequest request) {
+        return response(HttpStatus.NOT_FOUND, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler({ConflictException.class, DataIntegrityViolationException.class})
+    ResponseEntity<ApiErrorResponse> handleConflictException(
+            Exception exception,
+            HttpServletRequest request) {
+        return response(HttpStatus.CONFLICT, "The request conflicts with existing data.", request, Map.of());
     }
 
     @ExceptionHandler(Exception.class)
