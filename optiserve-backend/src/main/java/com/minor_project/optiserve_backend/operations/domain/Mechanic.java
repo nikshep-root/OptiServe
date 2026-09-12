@@ -15,30 +15,40 @@ import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.HashSet;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
 @Entity
-@Table(name = "resources")
-public class Resource {
+@Table(name = "mechanics")
+public class Mechanic {
 
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     private UUID id;
 
-    @Column(name = "name", nullable = false, unique = true, length = 150)
+    @Column(name = "employee_id", nullable = false, unique = true, length = 64)
+    private String employeeId;
+
+    @Column(name = "name", nullable = false, length = 150)
     private String name;
+
+    @Column(name = "phone", length = 32)
+    private String phone;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 32)
-    private ResourceStatus status;
+    private MechanicStatus status;
+
+    @Column(name = "joined_at")
+    private LocalDate joinedAt;
 
     @ManyToMany(fetch = FetchType.LAZY)
     @JoinTable(
-            name = "resource_service_type_capabilities",
-            joinColumns = @JoinColumn(name = "resource_id", nullable = false),
+            name = "mechanic_service_type_capabilities",
+            joinColumns = @JoinColumn(name = "mechanic_id", nullable = false),
             inverseJoinColumns = @JoinColumn(name = "service_type_id", nullable = false))
     private Set<ServiceType> compatibleServiceTypes = new HashSet<>();
 
@@ -48,20 +58,34 @@ public class Resource {
     @Column(name = "updated_at", nullable = false)
     private Instant updatedAt;
 
-    protected Resource() {
+    protected Mechanic() {
     }
 
-    private Resource(String name, Set<ServiceType> compatibleServiceTypes) {
+    private Mechanic(
+            String employeeId,
+            String name,
+            String phone,
+            LocalDate joinedAt,
+            Set<ServiceType> compatibleServiceTypes) {
+        this.employeeId = requireText(employeeId, "employeeId");
         this.name = requireText(name, "name");
-        this.compatibleServiceTypes.addAll(Objects.requireNonNull(compatibleServiceTypes,
-                "compatibleServiceTypes must not be null"));
-        this.status = ResourceStatus.AVAILABLE;
+        this.phone = phone != null && !phone.isBlank() ? phone.trim() : null;
+        this.joinedAt = joinedAt;
+        if (compatibleServiceTypes != null) {
+            this.compatibleServiceTypes.addAll(compatibleServiceTypes);
+        }
+        this.status = MechanicStatus.AVAILABLE;
         this.createdAt = Instant.now();
         this.updatedAt = createdAt;
     }
 
-    public static Resource create(String name, Set<ServiceType> compatibleServiceTypes) {
-        return new Resource(name, compatibleServiceTypes);
+    public static Mechanic create(
+            String employeeId,
+            String name,
+            String phone,
+            LocalDate joinedAt,
+            Set<ServiceType> compatibleServiceTypes) {
+        return new Mechanic(employeeId, name, phone, joinedAt, compatibleServiceTypes);
     }
 
     public void addCapability(ServiceType serviceType) {
@@ -79,20 +103,25 @@ public class Resource {
     }
 
     public void markAvailable() {
-        status = ResourceStatus.AVAILABLE;
+        status = MechanicStatus.AVAILABLE;
         updatedAt = Instant.now();
     }
 
     public void markBusy() {
-        if (status != ResourceStatus.AVAILABLE) {
-            throw new IllegalStateException("Only an available resource can become busy");
+        if (status != MechanicStatus.AVAILABLE) {
+            throw new IllegalStateException("Only an available mechanic can become busy");
         }
-        status = ResourceStatus.BUSY;
+        status = MechanicStatus.BUSY;
+        updatedAt = Instant.now();
+    }
+
+    public void markOnLeave() {
+        status = MechanicStatus.ON_LEAVE;
         updatedAt = Instant.now();
     }
 
     public void markOffline() {
-        status = ResourceStatus.OFFLINE;
+        status = MechanicStatus.OFFLINE;
         updatedAt = Instant.now();
     }
 
@@ -100,12 +129,24 @@ public class Resource {
         return id;
     }
 
+    public String getEmployeeId() {
+        return employeeId;
+    }
+
     public String getName() {
         return name;
     }
 
-    public ResourceStatus getStatus() {
+    public String getPhone() {
+        return phone;
+    }
+
+    public MechanicStatus getStatus() {
         return status;
+    }
+
+    public LocalDate getJoinedAt() {
+        return joinedAt;
     }
 
     public Set<ServiceType> getCompatibleServiceTypes() {

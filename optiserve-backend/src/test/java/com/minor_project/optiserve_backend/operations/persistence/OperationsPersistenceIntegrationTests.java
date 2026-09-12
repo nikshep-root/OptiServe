@@ -5,16 +5,21 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.minor_project.optiserve_backend.operations.domain.Assignment;
 import com.minor_project.optiserve_backend.operations.domain.AssignmentStatus;
+import com.minor_project.optiserve_backend.operations.domain.BayType;
+import com.minor_project.optiserve_backend.operations.domain.Customer;
+import com.minor_project.optiserve_backend.operations.domain.Mechanic;
 import com.minor_project.optiserve_backend.operations.domain.PriorityClass;
 import com.minor_project.optiserve_backend.operations.domain.QueueEntry;
 import com.minor_project.optiserve_backend.operations.domain.QueueEntryStatus;
-import com.minor_project.optiserve_backend.operations.domain.Resource;
+import com.minor_project.optiserve_backend.operations.domain.ServiceBay;
 import com.minor_project.optiserve_backend.operations.domain.ServiceRequest;
 import com.minor_project.optiserve_backend.operations.domain.ServiceRequestStatus;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
+import com.minor_project.optiserve_backend.operations.domain.Vehicle;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
@@ -32,7 +37,16 @@ class OperationsPersistenceIntegrationTests {
     private ServiceTypeRepository serviceTypeRepository;
 
     @Autowired
-    private ResourceRepository resourceRepository;
+    private CustomerRepository customerRepository;
+
+    @Autowired
+    private VehicleRepository vehicleRepository;
+
+    @Autowired
+    private MechanicRepository mechanicRepository;
+
+    @Autowired
+    private ServiceBayRepository serviceBayRepository;
 
     @Autowired
     private ServiceRequestRepository serviceRequestRepository;
@@ -60,42 +74,67 @@ class OperationsPersistenceIntegrationTests {
     }
 
     @Test
-    void migratedPostgreSqlSchemaContainsOperationsTablesAndActiveAssignmentIndexes() {
-        assertThat(jdbcTemplate.queryForList(
-                "SELECT table_name FROM information_schema.tables "
-                        + "WHERE table_schema = 'public' AND table_name IN "
-                        + "('service_types', 'resources', 'resource_service_type_capabilities', "
-                        + "'service_requests', 'queue_entries', 'assignments') "
-                        + "ORDER BY table_name",
-                String.class)).containsExactly(
-                        "assignments",
-                        "queue_entries",
-                        "resource_service_type_capabilities",
-                        "resources",
-                        "service_requests",
-                        "service_types");
+    void customerAndVehiclePersistCorrectly() {
+        Customer customer = customerRepository.saveAndFlush(
+                Customer.createRegistered("John Doe", "john@example.com", "pass123", "555-1001", "123 Main St"));
+        Vehicle vehicle = vehicleRepository.saveAndFlush(
+                Vehicle.create(customer, "ABC-123", "Toyota", "Corolla", 2020, "PETROL", "Blue", "1HGCR2F83HA123456", 45000L));
 
-        assertThat(jdbcTemplate.queryForList(
-                "SELECT indexname FROM pg_indexes WHERE schemaname = 'public' "
-                        + "AND indexname IN ('uq_assignments_active_request', 'uq_assignments_active_resource') "
-                        + "ORDER BY indexname",
-                String.class)).containsExactly("uq_assignments_active_request", "uq_assignments_active_resource");
-
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT count(*) FROM flyway_schema_history WHERE version = '1' AND success",
-                Integer.class)).isEqualTo(1);
+        assertThat(vehicleRepository.findByVin("1HGCR2F83HA123456")).isPresent();
+        assertThat(vehicleRepository.findByRegistrationNumber("ABC-123")).isPresent();
+        assertThat(customerRepository.findByEmail("john@example.com")).isPresent();
     }
 
     @Test
-    void resourceServiceTypeCompatibilityPersists() {
-        ServiceType serviceType = serviceTypeRepository.saveAndFlush(serviceType("Registration"));
-        Resource resource = resourceRepository.saveAndFlush(Resource.create("Counter A", Set.of(serviceType)));
+    void migratedPostgreSqlSchemaContainsAutomotiveTablesAndActiveAssignmentIndexes() {
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT table_name FROM information_schema.tables "
+                        + "WHERE table_schema = 'public' AND table_name IN "
+                        + "('customers', 'vehicles', 'mechanics', 'mechanic_service_type_capabilities', "
+                        + "'service_bays', 'bay_service_type_capabilities', "
+                        + "'service_types', 'service_requests', 'queue_entries', 'assignments') "
+                        + "ORDER BY table_name",
+                String.class)).containsExactly(
+                        "assignments",
+                        "bay_service_type_capabilities",
+                        "customers",
+                        "mechanic_service_type_capabilities",
+                        "mechanics",
+                        "queue_entries",
+                        "service_bays",
+                        "service_requests",
+                        "service_types",
+                        "vehicles");
 
-        Resource reloaded = resourceRepository.findById(resource.getId()).orElseThrow();
+        assertThat(jdbcTemplate.queryForList(
+                "SELECT indexname FROM pg_indexes WHERE schemaname = 'public' "
+                        + "AND indexname IN ('uq_assignments_active_request', 'uq_assignments_active_mechanic', 'uq_assignments_active_bay') "
+                        + "ORDER BY indexname",
+                String.class)).containsExactly("uq_assignments_active_bay", "uq_assignments_active_mechanic", "uq_assignments_active_request");
 
-        assertThat(reloaded.getCompatibleServiceTypes())
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM flyway_schema_history WHERE success",
+                Integer.class)).isGreaterThanOrEqualTo(2);
+    }
+
+    @Test
+    void mechanicAndBayCapabilitiesPersist() {
+        ServiceType serviceType = serviceTypeRepository.saveAndFlush(serviceType("Diagnostics"));
+        Mechanic mechanic = mechanicRepository.saveAndFlush(
+                Mechanic.create("EMP-001", "Alex Tech", "555-0101", LocalDate.now(), Set.of(serviceType)));
+        ServiceBay bay = serviceBayRepository.saveAndFlush(
+                ServiceBay.create("BAY-1", BayType.DIAGNOSTIC, Set.of(serviceType)));
+
+        Mechanic reloadedMechanic = mechanicRepository.findById(mechanic.getId()).orElseThrow();
+        ServiceBay reloadedBay = serviceBayRepository.findById(bay.getId()).orElseThrow();
+
+        assertThat(reloadedMechanic.getCompatibleServiceTypes())
                 .extracting(ServiceType::getName)
-                .containsExactly("Registration");
+                .containsExactly("Diagnostics");
+
+        assertThat(reloadedBay.getCompatibleServiceTypes())
+                .extracting(ServiceType::getName)
+                .containsExactly("Diagnostics");
     }
 
     @Test
@@ -117,17 +156,22 @@ class OperationsPersistenceIntegrationTests {
     @Test
     void assignmentPersistsAndMaintainsActiveState() {
         ServiceType serviceType = serviceTypeRepository.saveAndFlush(serviceType("Consultation"));
-        Resource resource = resourceRepository.saveAndFlush(Resource.create("Counter B", Set.of(serviceType)));
+        Mechanic mechanic = mechanicRepository.saveAndFlush(
+                Mechanic.create("EMP-002", "Bob Tech", "555-0102", LocalDate.now(), Set.of(serviceType)));
+        ServiceBay bay = serviceBayRepository.saveAndFlush(
+                ServiceBay.create("BAY-2", BayType.GENERAL, Set.of(serviceType)));
+
         ServiceRequest request = waitingRequest(serviceType);
         serviceRequestRepository.saveAndFlush(request);
 
-        Assignment assignment = Assignment.assign(request, resource, Instant.parse("2026-09-08T09:00:00Z"),
+        Assignment assignment = Assignment.assign(request, mechanic, bay, Instant.parse("2026-09-08T09:00:00Z"),
                 Duration.ofMinutes(20));
         Assignment persisted = assignmentRepository.saveAndFlush(assignment);
 
         assertThat(persisted.getStatus()).isEqualTo(AssignmentStatus.ASSIGNED);
         assertThat(persisted.getServiceRequest().getId()).isEqualTo(request.getId());
-        assertThat(persisted.getResource().getId()).isEqualTo(resource.getId());
+        assertThat(persisted.getMechanic().getId()).isEqualTo(mechanic.getId());
+        assertThat(persisted.getServiceBay().getId()).isEqualTo(bay.getId());
     }
 
     @Test
@@ -139,19 +183,27 @@ class OperationsPersistenceIntegrationTests {
     }
 
     @Test
-    void activeAssignmentPartialUniqueConstraintIsEnforced() {
+    void activeAssignmentPartialUniqueConstraintIsEnforcedForMechanicAndBay() {
         ServiceType serviceType = serviceTypeRepository.saveAndFlush(serviceType("Verification"));
-        Resource resource = resourceRepository.saveAndFlush(Resource.create("Counter C", Set.of(serviceType)));
+        Mechanic mechanic = mechanicRepository.saveAndFlush(
+                Mechanic.create("EMP-003", "Charlie Tech", "555-0103", LocalDate.now(), Set.of(serviceType)));
+        ServiceBay bay = serviceBayRepository.saveAndFlush(
+                ServiceBay.create("BAY-3", BayType.GENERAL, Set.of(serviceType)));
+
         ServiceRequest request = waitingRequest(serviceType);
         serviceRequestRepository.saveAndFlush(request);
-        Assignment assignment = Assignment.assign(request, resource, Instant.parse("2026-09-08T09:00:00Z"),
+        Assignment assignment = Assignment.assign(request, mechanic, bay, Instant.parse("2026-09-08T09:00:00Z"),
                 Duration.ofMinutes(20));
         assignmentRepository.saveAndFlush(assignment);
 
+        // Attempting to assign the same mechanic to another request simultaneously should fail
+        ServiceRequest secondRequest = waitingRequest(serviceType);
+        serviceRequestRepository.saveAndFlush(secondRequest);
+
         assertThatThrownBy(() -> jdbcTemplate.update(
                 "INSERT INTO assignments "
-                        + "(id, service_request_id, resource_id, assigned_at, status) VALUES (?, ?, ?, ?, ?)",
-                UUID.randomUUID(), request.getId(), resource.getId(),
+                        + "(id, service_request_id, mechanic_id, bay_id, assigned_at, status) VALUES (?, ?, ?, ?, ?, ?)",
+                UUID.randomUUID(), secondRequest.getId(), mechanic.getId(), bay.getId(),
                 Timestamp.from(Instant.parse("2026-09-08T09:01:00Z")), "ASSIGNED"))
                 .isInstanceOf(DataIntegrityViolationException.class);
     }

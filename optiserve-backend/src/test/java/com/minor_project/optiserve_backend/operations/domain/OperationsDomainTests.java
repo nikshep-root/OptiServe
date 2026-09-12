@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDate;
 import java.util.Set;
 import org.junit.jupiter.api.Test;
 
@@ -49,37 +50,58 @@ class OperationsDomainTests {
     }
 
     @Test
-    void resourceExposesAvailabilityAndCompatibilityRules() {
+    void mechanicExposesAvailabilityAndCapabilityRules() {
         ServiceType supportedType = serviceType();
         ServiceType unsupportedType = ServiceType.create("Different", null, Duration.ofMinutes(10));
-        Resource resource = Resource.create("Counter A", Set.of(supportedType));
+        Mechanic mechanic = Mechanic.create("EMP-001", "John Tech", "555-0100", LocalDate.now(), Set.of(supportedType));
 
-        assertThat(resource.getStatus()).isEqualTo(ResourceStatus.AVAILABLE);
-        assertThat(resource.supports(supportedType)).isTrue();
-        assertThat(resource.supports(unsupportedType)).isFalse();
+        assertThat(mechanic.getStatus()).isEqualTo(MechanicStatus.AVAILABLE);
+        assertThat(mechanic.supports(supportedType)).isTrue();
+        assertThat(mechanic.supports(unsupportedType)).isFalse();
 
-        resource.markBusy();
-        assertThat(resource.getStatus()).isEqualTo(ResourceStatus.BUSY);
-        assertThatIllegalStateException().isThrownBy(resource::markBusy);
+        mechanic.markBusy();
+        assertThat(mechanic.getStatus()).isEqualTo(MechanicStatus.BUSY);
+        assertThatIllegalStateException().isThrownBy(mechanic::markBusy);
 
-        resource.markOffline();
-        assertThat(resource.getStatus()).isEqualTo(ResourceStatus.OFFLINE);
+        mechanic.markOffline();
+        assertThat(mechanic.getStatus()).isEqualTo(MechanicStatus.OFFLINE);
     }
 
     @Test
-    void assignmentEnforcesCompatibilityAndSingleActiveAssignment() {
+    void serviceBayExposesAvailabilityAndCapabilityRules() {
+        ServiceType supportedType = serviceType();
+        ServiceType unsupportedType = ServiceType.create("Different", null, Duration.ofMinutes(10));
+        ServiceBay bay = ServiceBay.create("BAY-1", BayType.GENERAL, Set.of(supportedType));
+
+        assertThat(bay.getStatus()).isEqualTo(BayStatus.AVAILABLE);
+        assertThat(bay.supports(supportedType)).isTrue();
+        assertThat(bay.supports(unsupportedType)).isFalse();
+
+        bay.markOccupied();
+        assertThat(bay.getStatus()).isEqualTo(BayStatus.OCCUPIED);
+        assertThatIllegalStateException().isThrownBy(bay::markOccupied);
+
+        bay.markOffline();
+        assertThat(bay.getStatus()).isEqualTo(BayStatus.OFFLINE);
+    }
+
+    @Test
+    void assignmentEnforcesDualCompatibilityAndSingleActiveAssignment() {
         ServiceType serviceType = serviceType();
         ServiceRequest request = waitingRequest(serviceType);
-        Resource compatibleResource = Resource.create("Counter A", Set.of(serviceType));
+        Mechanic mechanic = Mechanic.create("EMP-001", "John Tech", "555-0100", LocalDate.now(), Set.of(serviceType));
+        ServiceBay bay = ServiceBay.create("BAY-1", BayType.GENERAL, Set.of(serviceType));
 
         Assignment assignment = Assignment.assign(
-                request, compatibleResource, REQUESTED_AT, Duration.ofMinutes(15));
+                request, mechanic, bay, REQUESTED_AT, Duration.ofMinutes(15));
 
         assertThat(assignment.getStatus()).isEqualTo(AssignmentStatus.ASSIGNED);
         assertThat(request.getStatus()).isEqualTo(ServiceRequestStatus.ASSIGNED);
-        assertThat(compatibleResource.getStatus()).isEqualTo(ResourceStatus.BUSY);
+        assertThat(mechanic.getStatus()).isEqualTo(MechanicStatus.BUSY);
+        assertThat(bay.getStatus()).isEqualTo(BayStatus.OCCUPIED);
+
         assertThatIllegalStateException()
-                .isThrownBy(() -> Assignment.assign(request, compatibleResource, REQUESTED_AT, Duration.ofMinutes(15)));
+                .isThrownBy(() -> Assignment.assign(request, mechanic, bay, REQUESTED_AT, Duration.ofMinutes(15)));
 
         assignment.start(REQUESTED_AT.plus(Duration.ofMinutes(1)));
         assertThatIllegalStateException().isThrownBy(assignment::cancelBeforeStart);
@@ -88,29 +110,29 @@ class OperationsDomainTests {
         assertThat(assignment.getStatus()).isEqualTo(AssignmentStatus.COMPLETED);
         assertThat(assignment.getActualServiceDuration()).isEqualTo(Duration.ofMinutes(10));
         assertThat(request.getStatus()).isEqualTo(ServiceRequestStatus.COMPLETED);
-        assertThat(compatibleResource.getStatus()).isEqualTo(ResourceStatus.AVAILABLE);
+        assertThat(mechanic.getStatus()).isEqualTo(MechanicStatus.AVAILABLE);
+        assertThat(bay.getStatus()).isEqualTo(BayStatus.AVAILABLE);
     }
 
     @Test
-    void incompatibleResourcesCannotReceiveAssignmentsAndOfflineStateIsPreservedOnCompletion() {
+    void incompatibleMechanicOrBayCannotReceiveAssignments() {
         ServiceType requestedType = serviceType();
         ServiceType otherType = ServiceType.create("Different", null, Duration.ofMinutes(10));
-        ServiceRequest incompatibleRequest = waitingRequest(requestedType);
-        Resource incompatibleResource = Resource.create("Counter A", Set.of(otherType));
+        ServiceRequest request = waitingRequest(requestedType);
+
+        Mechanic incompatibleMechanic = Mechanic.create("EMP-001", "John Tech", "555-0100", LocalDate.now(), Set.of(otherType));
+        ServiceBay compatibleBay = ServiceBay.create("BAY-1", BayType.GENERAL, Set.of(requestedType));
 
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> Assignment.assign(
-                        incompatibleRequest, incompatibleResource, REQUESTED_AT, Duration.ofMinutes(15)));
+                        request, incompatibleMechanic, compatibleBay, REQUESTED_AT, Duration.ofMinutes(15)));
 
-        ServiceRequest compatibleRequest = waitingRequest(requestedType);
-        Resource resource = Resource.create("Counter B", Set.of(requestedType));
-        Assignment assignment = Assignment.assign(compatibleRequest, resource, REQUESTED_AT, Duration.ofMinutes(15));
-        assignment.start(REQUESTED_AT.plus(Duration.ofMinutes(1)));
-        resource.markOffline();
+        Mechanic compatibleMechanic = Mechanic.create("EMP-002", "Jane Tech", "555-0200", LocalDate.now(), Set.of(requestedType));
+        ServiceBay incompatibleBay = ServiceBay.create("BAY-2", BayType.EV, Set.of(otherType));
 
-        assignment.complete(REQUESTED_AT.plus(Duration.ofMinutes(11)));
-
-        assertThat(resource.getStatus()).isEqualTo(ResourceStatus.OFFLINE);
+        assertThatIllegalArgumentException()
+                .isThrownBy(() -> Assignment.assign(
+                        request, compatibleMechanic, incompatibleBay, REQUESTED_AT, Duration.ofMinutes(15)));
     }
 
     @Test
@@ -126,6 +148,23 @@ class OperationsDomainTests {
         queueEntry.remove();
         assertThat(queueEntry.getStatus()).isEqualTo(QueueEntryStatus.REMOVED);
         assertThatIllegalStateException().isThrownBy(queueEntry::remove);
+    }
+
+    @Test
+    void customerAndVehicleSupportEmergencyAndRegisteredScenarios() {
+        Customer guest = Customer.createGuest("Emergency Services", "911-0000");
+        assertThat(guest.getName()).isEqualTo("Emergency Services");
+        assertThat(guest.getEmail()).isNull();
+        assertThat(guest.getPassword()).isNull();
+
+        Customer registered = Customer.createRegistered("Alice Smith", "alice@example.com", "secret123", "555-1234", "123 Elm St");
+        assertThat(registered.getEmail()).isEqualTo("alice@example.com");
+
+        Vehicle ambulance = Vehicle.create(
+                guest, "AMB-911", "Ford", "Transit Ambulance", 2023, "DIESEL", "WHITE", "1FTNE3Y89PK123456", 15000L);
+        assertThat(ambulance.getRegistrationNumber()).isEqualTo("AMB-911");
+        assertThat(ambulance.getCurrentMileage()).isEqualTo(15000L);
+        assertThat(ambulance.getCustomer()).isSameAs(guest);
     }
 
     private ServiceType serviceType() {

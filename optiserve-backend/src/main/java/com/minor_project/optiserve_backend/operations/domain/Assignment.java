@@ -29,8 +29,12 @@ public class Assignment {
     private ServiceRequest serviceRequest;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
-    @JoinColumn(name = "resource_id", nullable = false)
-    private Resource resource;
+    @JoinColumn(name = "mechanic_id", nullable = false)
+    private Mechanic mechanic;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "bay_id", nullable = false)
+    private ServiceBay serviceBay;
 
     @Column(name = "assigned_at", nullable = false, updatable = false)
     private Instant assignedAt;
@@ -56,11 +60,13 @@ public class Assignment {
 
     private Assignment(
             ServiceRequest serviceRequest,
-            Resource resource,
+            Mechanic mechanic,
+            ServiceBay serviceBay,
             Instant assignedAt,
             Duration predictedServiceDuration) {
         this.serviceRequest = Objects.requireNonNull(serviceRequest, "serviceRequest must not be null");
-        this.resource = Objects.requireNonNull(resource, "resource must not be null");
+        this.mechanic = Objects.requireNonNull(mechanic, "mechanic must not be null");
+        this.serviceBay = Objects.requireNonNull(serviceBay, "serviceBay must not be null");
         this.assignedAt = Objects.requireNonNull(assignedAt, "assignedAt must not be null");
         if (predictedServiceDuration != null && (predictedServiceDuration.isNegative() || predictedServiceDuration.isZero())) {
             throw new IllegalArgumentException("predictedServiceDuration must be positive when provided");
@@ -68,24 +74,32 @@ public class Assignment {
         if (serviceRequest.getStatus() != ServiceRequestStatus.WAITING) {
             throw new IllegalStateException("Only a waiting service request can be assigned");
         }
-        if (resource.getStatus() != ResourceStatus.AVAILABLE) {
-            throw new IllegalStateException("Only an available resource can receive an assignment");
+        if (mechanic.getStatus() != MechanicStatus.AVAILABLE) {
+            throw new IllegalStateException("Only an available mechanic can receive an assignment");
         }
-        if (!resource.supports(serviceRequest.getServiceType())) {
-            throw new IllegalArgumentException("Resource is not compatible with the requested service type");
+        if (serviceBay.getStatus() != BayStatus.AVAILABLE) {
+            throw new IllegalStateException("Only an available service bay can receive an assignment");
+        }
+        if (!mechanic.supports(serviceRequest.getServiceType())) {
+            throw new IllegalArgumentException("Mechanic is not qualified for the requested service type");
+        }
+        if (!serviceBay.supports(serviceRequest.getServiceType())) {
+            throw new IllegalArgumentException("Service bay is not compatible with the requested service type");
         }
         this.predictedServiceDuration = predictedServiceDuration;
         this.status = AssignmentStatus.ASSIGNED;
         serviceRequest.assign();
-        resource.markBusy();
+        mechanic.markBusy();
+        serviceBay.markOccupied();
     }
 
     public static Assignment assign(
             ServiceRequest serviceRequest,
-            Resource resource,
+            Mechanic mechanic,
+            ServiceBay serviceBay,
             Instant assignedAt,
             Duration predictedServiceDuration) {
-        return new Assignment(serviceRequest, resource, assignedAt, predictedServiceDuration);
+        return new Assignment(serviceRequest, mechanic, serviceBay, assignedAt, predictedServiceDuration);
     }
 
     public void start(Instant startedAt) {
@@ -113,8 +127,11 @@ public class Assignment {
         this.actualServiceDuration = Duration.between(startedAt, completedAt);
         this.status = AssignmentStatus.COMPLETED;
         serviceRequest.complete(actualServiceDuration);
-        if (resource.getStatus() == ResourceStatus.BUSY) {
-            resource.markAvailable();
+        if (mechanic.getStatus() == MechanicStatus.BUSY) {
+            mechanic.markAvailable();
+        }
+        if (serviceBay.getStatus() == BayStatus.OCCUPIED) {
+            serviceBay.markAvailable();
         }
     }
 
@@ -124,8 +141,11 @@ public class Assignment {
         }
         status = AssignmentStatus.CANCELLED;
         serviceRequest.cancel();
-        if (resource.getStatus() == ResourceStatus.BUSY) {
-            resource.markAvailable();
+        if (mechanic.getStatus() == MechanicStatus.BUSY) {
+            mechanic.markAvailable();
+        }
+        if (serviceBay.getStatus() == BayStatus.OCCUPIED) {
+            serviceBay.markAvailable();
         }
     }
 
@@ -137,8 +157,12 @@ public class Assignment {
         return serviceRequest;
     }
 
-    public Resource getResource() {
-        return resource;
+    public Mechanic getMechanic() {
+        return mechanic;
+    }
+
+    public ServiceBay getServiceBay() {
+        return serviceBay;
     }
 
     public Instant getAssignedAt() {

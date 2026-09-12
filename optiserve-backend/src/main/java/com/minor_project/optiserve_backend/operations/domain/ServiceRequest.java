@@ -30,6 +30,10 @@ public class ServiceRequest {
     @JoinColumn(name = "service_type_id", nullable = false)
     private ServiceType serviceType;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "vehicle_id")
+    private Vehicle vehicle;
+
     @Enumerated(EnumType.STRING)
     @Column(name = "priority_class", nullable = false, length = 32)
     private PriorityClass priorityClass;
@@ -50,7 +54,8 @@ public class ServiceRequest {
     protected ServiceRequest() {
     }
 
-    private ServiceRequest(ServiceType serviceType, PriorityClass priorityClass, Instant appointmentAt) {
+    private ServiceRequest(Vehicle vehicle, ServiceType serviceType, PriorityClass priorityClass, Instant appointmentAt) {
+        this.vehicle = vehicle;
         this.serviceType = Objects.requireNonNull(serviceType, "serviceType must not be null");
         this.priorityClass = Objects.requireNonNull(priorityClass, "priorityClass must not be null");
         if (priorityClass == PriorityClass.APPOINTMENT && appointmentAt == null) {
@@ -65,7 +70,15 @@ public class ServiceRequest {
             ServiceType serviceType,
             PriorityClass priorityClass,
             Instant appointmentAt) {
-        return new ServiceRequest(serviceType, priorityClass, appointmentAt);
+        return new ServiceRequest(null, serviceType, priorityClass, appointmentAt);
+    }
+
+    public static ServiceRequest create(
+            Vehicle vehicle,
+            ServiceType serviceType,
+            PriorityClass priorityClass,
+            Instant appointmentAt) {
+        return new ServiceRequest(vehicle, serviceType, priorityClass, appointmentAt);
     }
 
     public void enqueue() {
@@ -99,6 +112,14 @@ public class ServiceRequest {
 
     public UUID getId() {
         return id;
+    }
+
+    public Vehicle getVehicle() {
+        return vehicle;
+    }
+
+    public void assignVehicle(Vehicle vehicle) {
+        this.vehicle = vehicle;
     }
 
     public ServiceType getServiceType() {

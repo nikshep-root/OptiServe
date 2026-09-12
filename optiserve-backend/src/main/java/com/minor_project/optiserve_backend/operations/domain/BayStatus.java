@@ -1,7 +1,8 @@
 package com.minor_project.optiserve_backend.operations.domain;
 
-public enum ResourceStatus {
+public enum BayStatus {
     AVAILABLE,
-    BUSY,
+    OCCUPIED,
+    MAINTENANCE,
     OFFLINE
 }
