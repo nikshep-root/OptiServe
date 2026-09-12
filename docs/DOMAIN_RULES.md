@@ -4,6 +4,7 @@
 
 - A **ServiceRequest** represents a customer request for a service.
 - A **ServiceType** defines the type of service and its characteristics.
+- A **Vehicle** represents the vehicle being serviced and is identified by a unique, normalized registration number. Its customer identifier is external until customer management is introduced.
 - A **Resource** represents a service counter/resource and has compatible service types.
 - A **ServiceWorkflow** belongs to exactly one service request and contains its ordered work.
 - A **ServiceStage** is one executable step in a workflow and requires exactly one service type.
