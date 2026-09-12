@@ -29,6 +29,10 @@ public class Assignment {
     private ServiceRequest serviceRequest;
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "service_stage_id", nullable = false)
+    private ServiceStage serviceStage;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "resource_id", nullable = false)
     private Resource resource;
 
@@ -55,37 +59,38 @@ public class Assignment {
     }
 
     private Assignment(
-            ServiceRequest serviceRequest,
+            ServiceStage serviceStage,
             Resource resource,
             Instant assignedAt,
             Duration predictedServiceDuration) {
-        this.serviceRequest = Objects.requireNonNull(serviceRequest, "serviceRequest must not be null");
+        this.serviceStage = Objects.requireNonNull(serviceStage, "serviceStage must not be null");
+        this.serviceRequest = serviceStage.getWorkflow().getServiceRequest();
         this.resource = Objects.requireNonNull(resource, "resource must not be null");
         this.assignedAt = Objects.requireNonNull(assignedAt, "assignedAt must not be null");
         if (predictedServiceDuration != null && (predictedServiceDuration.isNegative() || predictedServiceDuration.isZero())) {
             throw new IllegalArgumentException("predictedServiceDuration must be positive when provided");
         }
-        if (serviceRequest.getStatus() != ServiceRequestStatus.WAITING) {
-            throw new IllegalStateException("Only a waiting service request can be assigned");
+        if (serviceStage.getStatus() != ServiceStageStatus.QUEUED) {
+            throw new IllegalStateException("Only a queued service stage can be assigned");
         }
         if (resource.getStatus() != ResourceStatus.AVAILABLE) {
             throw new IllegalStateException("Only an available resource can receive an assignment");
         }
-        if (!resource.supports(serviceRequest.getServiceType())) {
-            throw new IllegalArgumentException("Resource is not compatible with the requested service type");
+        if (!resource.supports(serviceStage.getServiceType())) {
+            throw new IllegalArgumentException("Resource is not compatible with the stage service type");
         }
         this.predictedServiceDuration = predictedServiceDuration;
         this.status = AssignmentStatus.ASSIGNED;
-        serviceRequest.assign();
+        serviceStage.assign();
         resource.markBusy();
     }
 
     public static Assignment assign(
-            ServiceRequest serviceRequest,
+            ServiceStage serviceStage,
             Resource resource,
             Instant assignedAt,
             Duration predictedServiceDuration) {
-        return new Assignment(serviceRequest, resource, assignedAt, predictedServiceDuration);
+        return new Assignment(serviceStage, resource, assignedAt, predictedServiceDuration);
     }
 
     public void start(Instant startedAt) {
@@ -98,7 +103,7 @@ public class Assignment {
         }
         this.startedAt = startedAt;
         this.status = AssignmentStatus.IN_PROGRESS;
-        serviceRequest.startService();
+        serviceStage.start();
     }
 
     public void complete(Instant completedAt) {
@@ -112,7 +117,7 @@ public class Assignment {
         this.completedAt = completedAt;
         this.actualServiceDuration = Duration.between(startedAt, completedAt);
         this.status = AssignmentStatus.COMPLETED;
-        serviceRequest.complete(actualServiceDuration);
+        serviceStage.getWorkflow().completeStage(serviceStage, completedAt);
         if (resource.getStatus() == ResourceStatus.BUSY) {
             resource.markAvailable();
         }
@@ -123,7 +128,7 @@ public class Assignment {
             throw new IllegalStateException("An in-progress assignment must not be cancelled");
         }
         status = AssignmentStatus.CANCELLED;
-        serviceRequest.cancel();
+        serviceStage.cancel();
         if (resource.getStatus() == ResourceStatus.BUSY) {
             resource.markAvailable();
         }
@@ -135,6 +140,10 @@ public class Assignment {
 
     public ServiceRequest getServiceRequest() {
         return serviceRequest;
+    }
+
+    public ServiceStage getServiceStage() {
+        return serviceStage;
     }
 
     public Resource getResource() {

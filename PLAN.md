@@ -6,15 +6,15 @@ Confirm the PostgreSQL connection approach and supply environment-based datasour
 
 ## Phase 1 — Core Domain and Persistence
 
-Model service requests, service types, resources, compatibility, assignments, queue entries, and service lifecycle states. Add versioned Flyway migrations, JPA repositories, and DTO mappings. Preserve a clear module boundary between domain rules, application services, and REST adapters.
+Model service requests, service types, resources, compatibility, assignments, queue entries, and service lifecycle states. Establish the multi-stage workflow foundation: a request owns one workflow with ordered service stages; each stage requires a service type and is the authoritative queue and assignment unit. Add versioned Flyway migrations, JPA repositories, and DTO mappings. Preserve a clear module boundary between domain rules, application services, and REST adapters.
 
 ## Phase 2 — Service and Resource APIs
 
-Implement validated REST APIs for managing service types, compatible resources, and service requests. Do not expose entities. Cover authorization decisions, invalid state transitions, and persistence behavior with unit and integration tests.
+Implement validated REST APIs for managing service types, compatible resources, and later service requests with their workflows and stages. Do not expose entities. Cover authorization decisions, invalid state transitions, and persistence behavior with unit and integration tests.
 
 ## Phase 3 — Queue Scheduler
 
-Implement a transactional scheduler that recalculates on enqueue, cancellation, completion, resource availability, priority changes, and compatibility changes. Rank requests by priority plus aging, limit assignment to compatible available resources, and use predicted duration as a scheduling input. Critical requests take the next compatible resource without interrupting active work. Calculate waiting time dynamically from current assignments and queue state.
+Implement a transactional scheduler that recalculates on stage enqueue, cancellation, completion, resource availability, priority changes, and compatibility changes. Rank eligible stages using their parent request's priority plus aging, limit assignment to compatible available resources, and use predicted duration as a scheduling input. Critical stages inherit their request priority and take the next compatible resource without interrupting active work. Calculate waiting time dynamically from current assignments and queue state.
 
 ## Phase 4 — Operations APIs and Observability
 
