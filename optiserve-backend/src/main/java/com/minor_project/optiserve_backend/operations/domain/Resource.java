@@ -70,12 +70,30 @@ public class Resource {
     }
 
     public void removeCapability(ServiceType serviceType) {
-        compatibleServiceTypes.remove(Objects.requireNonNull(serviceType, "serviceType must not be null"));
+        ServiceType requiredServiceType = Objects.requireNonNull(serviceType, "serviceType must not be null");
+        compatibleServiceTypes.removeIf(candidate -> candidate == requiredServiceType
+                || (candidate.getId() != null && candidate.getId().equals(requiredServiceType.getId())));
         updatedAt = Instant.now();
     }
 
     public boolean supports(ServiceType serviceType) {
-        return compatibleServiceTypes.contains(Objects.requireNonNull(serviceType, "serviceType must not be null"));
+        ServiceType requiredServiceType = Objects.requireNonNull(serviceType, "serviceType must not be null");
+        return compatibleServiceTypes.stream().anyMatch(candidate -> candidate == requiredServiceType
+                || (candidate.getId() != null && candidate.getId().equals(requiredServiceType.getId())));
+    }
+
+    public void updateName(String name) {
+        this.name = requireText(name, "name");
+        updatedAt = Instant.now();
+    }
+
+    public void changeStatus(ResourceStatus targetStatus) {
+        Objects.requireNonNull(targetStatus, "targetStatus must not be null");
+        switch (targetStatus) {
+            case AVAILABLE -> markAvailable();
+            case BUSY -> markBusy();
+            case OFFLINE -> markOffline();
+        }
     }
 
     public void markAvailable() {

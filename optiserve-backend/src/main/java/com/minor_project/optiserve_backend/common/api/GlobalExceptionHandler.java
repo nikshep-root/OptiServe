@@ -49,7 +49,7 @@ public class GlobalExceptionHandler {
         return response(HttpStatus.NOT_FOUND, exception.getMessage(), request, Map.of());
     }
 
-    @ExceptionHandler({ConflictException.class, DataIntegrityViolationException.class})
+    @ExceptionHandler({ConflictException.class, StateConflictException.class, DataIntegrityViolationException.class})
     ResponseEntity<ApiErrorResponse> handleConflictException(
             Exception exception,
             HttpServletRequest request) {
