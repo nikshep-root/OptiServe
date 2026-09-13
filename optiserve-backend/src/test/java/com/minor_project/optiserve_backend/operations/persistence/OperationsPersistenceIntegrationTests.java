@@ -13,6 +13,7 @@ import com.minor_project.optiserve_backend.operations.domain.ServiceStageStatus;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.ServiceWorkflow;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
+import com.minor_project.optiserve_backend.operations.assignment.application.AssignmentApplicationService;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
@@ -39,6 +40,7 @@ class OperationsPersistenceIntegrationTests {
     @Autowired private QueueEntryRepository queueEntries;
     @Autowired private AssignmentRepository assignments;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private AssignmentApplicationService assignmentApplicationService;
 
     @Test
     void flywayV4CreatesWorkflowSchemaAndHibernatePersistsOrderedStages() {
@@ -163,6 +165,35 @@ class OperationsPersistenceIntegrationTests {
         assertThat(stages.findByStatusInOrderByEligibleAtAsc(
                 List.of(ServiceStageStatus.ELIGIBLE, ServiceStageStatus.QUEUED)))
                 .extracting(ServiceStage::getId).contains(stage.getId());
+    }
+
+    @Test
+    void assignmentStartAndCompletionPersistLifecycleState() {
+        ServiceType type = serviceTypes.saveAndFlush(type("Lifecycle persistence"));
+        Resource resource = resources.saveAndFlush(Resource.create("Lifecycle Bay", Set.of(type)));
+        ServiceRequest request = requests.saveAndFlush(request(type, PriorityClass.NORMAL));
+        ServiceWorkflow workflow = ServiceWorkflow.create(request);
+        ServiceStage stage = workflow.addStage(type, null);
+        workflows.saveAndFlush(workflow);
+        queueEntries.saveAndFlush(QueueEntry.enter(stage, Instant.now()));
+        Assignment assignment = assignments.saveAndFlush(Assignment.assign(stage, resource, Instant.now(), null));
+
+        assignmentApplicationService.start(assignment.getId());
+        assignments.flush(); stages.flush(); resources.flush();
+        Assignment started = assignments.findById(assignment.getId()).orElseThrow();
+        assertThat(started.getStatus().name()).isEqualTo("IN_PROGRESS");
+        assertThat(started.getServiceStage().getStatus()).isEqualTo(ServiceStageStatus.IN_PROGRESS);
+        assertThat(started.getResource().getStatus()).isEqualTo(com.minor_project.optiserve_backend.operations.domain.ResourceStatus.BUSY);
+        assertThat(started.getStartedAt()).isNotNull();
+
+        assignmentApplicationService.complete(assignment.getId(), 12L);
+        assignments.flush(); stages.flush(); resources.flush();
+        Assignment completed = assignments.findById(assignment.getId()).orElseThrow();
+        assertThat(completed.getStatus().name()).isEqualTo("COMPLETED");
+        assertThat(completed.getServiceStage().getStatus()).isEqualTo(ServiceStageStatus.COMPLETED);
+        assertThat(completed.getResource().getStatus()).isEqualTo(com.minor_project.optiserve_backend.operations.domain.ResourceStatus.AVAILABLE);
+        assertThat(completed.getCompletedAt()).isNotNull();
+        assertThat(completed.getActualServiceDuration()).isEqualTo(Duration.ofMinutes(12));
     }
 
     private ServiceType type(String name) {

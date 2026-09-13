@@ -107,6 +107,12 @@ public class ServiceRequest {
         transitionTo(ServiceRequestStatus.NO_SHOW);
     }
 
+    void completeFromWorkflow(Duration actualServiceDuration) {
+        Objects.requireNonNull(actualServiceDuration, "actualServiceDuration must not be null");
+        this.status = ServiceRequestStatus.COMPLETED;
+        this.actualServiceDuration = actualServiceDuration;
+    }
+
     public UUID getId() {
         return id;
     }

@@ -107,6 +107,10 @@ public class Assignment {
     }
 
     public void complete(Instant completedAt) {
+        complete(completedAt, null);
+    }
+
+    public void complete(Instant completedAt, Duration actualDuration) {
         Objects.requireNonNull(completedAt, "completedAt must not be null");
         if (status != AssignmentStatus.IN_PROGRESS) {
             throw new IllegalStateException("Only an in-progress assignment can be completed");
@@ -115,9 +119,15 @@ public class Assignment {
             throw new IllegalArgumentException("completedAt cannot be before startedAt");
         }
         this.completedAt = completedAt;
-        this.actualServiceDuration = Duration.between(startedAt, completedAt);
+        if (actualDuration != null && (actualDuration.isNegative() || actualDuration.isZero())) {
+            throw new IllegalArgumentException("actualDuration must be positive when provided");
+        }
+        this.actualServiceDuration = actualDuration == null ? Duration.between(startedAt, completedAt) : actualDuration;
         this.status = AssignmentStatus.COMPLETED;
         serviceStage.getWorkflow().completeStage(serviceStage, completedAt);
+        if (serviceStage.getWorkflow().getStatus() == ServiceWorkflowStatus.COMPLETED) {
+            serviceRequest.completeFromWorkflow(this.actualServiceDuration);
+        }
         if (resource.getStatus() == ResourceStatus.BUSY) {
             resource.markAvailable();
         }

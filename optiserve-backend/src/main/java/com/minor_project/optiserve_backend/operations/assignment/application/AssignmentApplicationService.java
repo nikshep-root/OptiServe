@@ -16,8 +16,10 @@ import com.minor_project.optiserve_backend.operations.persistence.ServiceStageRe
 import com.minor_project.optiserve_backend.operations.scheduler.domain.SchedulerStrategy;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -76,6 +78,32 @@ public class AssignmentApplicationService {
         queueEntry.remove();
         Assignment persistedAssignment = assignmentRepository.saveAndFlush(assignment);
         return assigned(persistedAssignment);
+    }
+
+    @Transactional
+    public com.minor_project.optiserve_backend.operations.assignment.api.AssignmentExecutionResponse start(UUID assignmentId) {
+        Assignment assignment = findAssignmentForUpdate(assignmentId);
+        assignment.start(Instant.now(clock));
+        return executionResponse(assignment);
+    }
+
+    @Transactional
+    public com.minor_project.optiserve_backend.operations.assignment.api.AssignmentExecutionResponse complete(UUID assignmentId, Long actualDurationMinutes) {
+        Assignment assignment = findAssignmentForUpdate(assignmentId);
+        Duration duration = actualDurationMinutes == null ? null : Duration.ofMinutes(actualDurationMinutes);
+        assignment.complete(Instant.now(clock), duration);
+        return executionResponse(assignment);
+    }
+
+    private Assignment findAssignmentForUpdate(java.util.UUID assignmentId) {
+        return assignmentRepository.findByIdForUpdate(assignmentId)
+                .orElseThrow(() -> new com.minor_project.optiserve_backend.common.api.ResourceNotFoundException("Assignment was not found."));
+    }
+
+    private static com.minor_project.optiserve_backend.operations.assignment.api.AssignmentExecutionResponse executionResponse(Assignment assignment) {
+        return new com.minor_project.optiserve_backend.operations.assignment.api.AssignmentExecutionResponse(
+                assignment.getId(), assignment.getStatus(), assignment.getServiceStage().getStatus(),
+                assignment.getResource().getStatus(), assignment.getStartedAt(), assignment.getCompletedAt(), assignment.getActualServiceDuration());
     }
 
     private static AssignmentNextResponse noAssignment(AssignmentNextResult result) {
