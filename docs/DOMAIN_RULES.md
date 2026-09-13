@@ -33,6 +33,12 @@ Queue entries and assignments are authoritative at the service-stage level. Thei
 
 A service request belongs to one vehicle and does not duplicate vehicle information. Creating a request requires an existing vehicle and a non-empty ordered list of existing active service types. The request, its one active workflow, and all supplied stages are created atomically. The first supplied service type is retained as the request's intake type for the existing schema; stage service types remain authoritative for execution. Request creation does not enqueue stages or select resources.
 
+## Queue Management
+
+Only an `ELIGIBLE` stage may enter the waiting queue. Queueing creates one `WAITING` queue entry for that stage, records its queue-entry time, and changes the stage to `QUEUED` atomically. A queue entry derives priority from its parent service request; it has no independent priority or stored waiting-time promise.
+
+Only one active queue entry may exist for a stage. Removing a waiting entry marks it `REMOVED` and returns its still-active stage to `ELIGIBLE`; it does not cancel the stage, workflow, or service request. A cancelled stage cannot be queued. Queue-entry time is used later by the scheduler to calculate dynamic waiting estimates.
+
 ## Priority and Critical Requests
 
 Priority classes are `CRITICAL`, `URGENT`, `APPOINTMENT`, and `NORMAL`.

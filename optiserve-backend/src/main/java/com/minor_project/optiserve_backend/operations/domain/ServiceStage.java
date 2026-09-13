@@ -89,6 +89,16 @@ public class ServiceStage {
         transitionTo(ServiceStageStatus.QUEUED, null);
     }
 
+    public void returnToEligible(Instant eligibleAt) {
+        Objects.requireNonNull(eligibleAt, "eligibleAt must not be null");
+        if (status != ServiceStageStatus.QUEUED) {
+            throw new IllegalStateException("Only a queued service stage can return to eligible");
+        }
+        status = ServiceStageStatus.ELIGIBLE;
+        this.eligibleAt = eligibleAt;
+        updatedAt = Instant.now();
+    }
+
     public void assign() {
         transitionTo(ServiceStageStatus.ASSIGNED, null);
     }
