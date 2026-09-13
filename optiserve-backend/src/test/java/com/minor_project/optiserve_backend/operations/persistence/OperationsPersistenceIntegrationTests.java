@@ -137,6 +137,22 @@ class OperationsPersistenceIntegrationTests {
     }
 
     @Test
+    void onlyOneWaitingQueueEntryCanExistForAStage() {
+        ServiceType type = serviceTypes.saveAndFlush(type("Queue uniqueness"));
+        ServiceRequest request = requests.saveAndFlush(request(type, PriorityClass.NORMAL));
+        ServiceWorkflow workflow = ServiceWorkflow.create(request);
+        ServiceStage stage = workflow.addStage(type, null);
+        workflows.saveAndFlush(workflow);
+        queueEntries.saveAndFlush(QueueEntry.enter(stage, Instant.parse("2026-09-08T09:00:00Z")));
+
+        assertThatThrownBy(() -> jdbcTemplate.update(
+                "INSERT INTO queue_entries (id, service_request_id, service_stage_id, queued_at, status) "
+                        + "VALUES (?, ?, ?, ?, ?)", UUID.randomUUID(), request.getId(), stage.getId(),
+                Timestamp.from(Instant.parse("2026-09-08T09:02:00Z")), "WAITING"))
+                .isInstanceOf(DataIntegrityViolationException.class);
+    }
+
+    @Test
     void stageRepositoryFindsEligibleAndQueuedStages() {
         ServiceType type = serviceTypes.saveAndFlush(type("Quality check"));
         ServiceRequest request = requests.saveAndFlush(request(type, PriorityClass.NORMAL));

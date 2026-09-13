@@ -64,6 +64,25 @@ class OperationsDomainTests {
     }
 
     @Test
+    void onlyEligibleStagesCanEnterTheQueue() {
+        ServiceWorkflow workflow = workflow();
+        ServiceStage stage = workflow.addStage(serviceType(), null);
+
+        stage.queue();
+        assertThatIllegalStateException().isThrownBy(stage::queue);
+        stage.assign();
+        assertThatIllegalStateException().isThrownBy(stage::queue);
+        stage.start();
+        assertThatIllegalStateException().isThrownBy(stage::queue);
+        stage.complete(TIME);
+        assertThatIllegalStateException().isThrownBy(stage::queue);
+
+        ServiceStage cancelled = workflow().addStage(serviceType(), null);
+        cancelled.cancel();
+        assertThatIllegalStateException().isThrownBy(cancelled::queue);
+    }
+
+    @Test
     void completingFirstStageMakesOnlyTheNextStageEligible() {
         ServiceWorkflow workflow = workflow();
         ServiceType type = serviceType();
