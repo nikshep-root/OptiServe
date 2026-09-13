@@ -49,6 +49,10 @@ Among requests in the same criticality group, selection uses base priority plus 
 
 The assignment operation asks the scheduler for one candidate, then assigns it only to a compatible `AVAILABLE` resource. Claiming the stage and resource, creating the `ASSIGNED` assignment, changing the stage to `ASSIGNED`, changing the resource to `BUSY`, and marking the queue entry `REMOVED` occur atomically. If no compatible resource is available, the selected stage remains queued. Active work is never preempted, and locking plus database constraints protect concurrent assignment attempts.
 
+## Service Execution
+
+An `ASSIGNED` assignment may start once, moving the assignment and stage to `IN_PROGRESS`. Completion moves both to `COMPLETED`, records supplied positive actual duration or elapsed time, and returns a `BUSY` resource to `AVAILABLE` unless it is `OFFLINE`. Completing a stage makes only its immediate pending successor `ELIGIBLE`; it never queues that stage automatically. Completing the final stage completes its workflow and service request.
+
 ## Priority and Critical Requests
 
 Priority classes are `CRITICAL`, `URGENT`, `APPOINTMENT`, and `NORMAL`.

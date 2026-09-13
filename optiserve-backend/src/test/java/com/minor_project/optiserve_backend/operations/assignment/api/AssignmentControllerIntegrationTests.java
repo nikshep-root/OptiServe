@@ -20,6 +20,7 @@ import com.minor_project.optiserve_backend.operations.persistence.ServiceStageRe
 import com.minor_project.optiserve_backend.operations.persistence.ServiceTypeRepository;
 import com.minor_project.optiserve_backend.operations.persistence.VehicleRepository;
 import com.minor_project.optiserve_backend.operations.queue.application.QueueApplicationService;
+import com.minor_project.optiserve_backend.operations.assignment.application.AssignmentApplicationService;
 import com.minor_project.optiserve_backend.operations.servicerequest.api.CreateServiceRequestRequest;
 import com.minor_project.optiserve_backend.operations.servicerequest.api.ServiceRequestResponse;
 import com.minor_project.optiserve_backend.operations.servicerequest.application.ServiceRequestApplicationService;
@@ -48,6 +49,7 @@ class AssignmentControllerIntegrationTests {
     @Autowired private AssignmentRepository assignments;
     @Autowired private ServiceRequestApplicationService serviceRequests;
     @Autowired private QueueApplicationService queue;
+    @Autowired private AssignmentApplicationService assignmentService;
 
     @Test
     void assignsNextStageAndReturnsAssignmentDetails() throws Exception {
@@ -86,6 +88,45 @@ class AssignmentControllerIntegrationTests {
                 .isEqualTo(ServiceStageStatus.QUEUED);
         assertThat(queueEntries.findByServiceStageIdAndStatus(request.stages().getFirst().id(), QueueEntryStatus.WAITING))
                 .isPresent();
+    }
+
+    @Test
+    void startsAssignmentAndReturnsConflictForRepeatedOrCompletedStart() throws Exception {
+        UUID assignmentId = assigned();
+        mockMvc.perform(post("/api/assignments/{id}/start", assignmentId).with(user("operator")))
+                .andExpect(status().isOk()).andExpect(jsonPath("$.assignmentStatus").value("IN_PROGRESS"));
+        mockMvc.perform(post("/api/assignments/{id}/start", assignmentId).with(user("operator")))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/assignments/{id}/complete", assignmentId).with(user("operator"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/assignments/{id}/start", assignmentId).with(user("operator")))
+                .andExpect(status().isConflict());
+    }
+
+    @Test
+    void returnsExpectedErrorsForStartAndCompleteEndpoints() throws Exception {
+        mockMvc.perform(post("/api/assignments/{id}/start", UUID.randomUUID()).with(user("operator")))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/assignments/{id}/complete", UUID.randomUUID()).with(user("operator"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isNotFound());
+        UUID assignmentId = assigned();
+        mockMvc.perform(post("/api/assignments/{id}/complete", assignmentId).with(user("operator"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{}"))
+                .andExpect(status().isConflict());
+        mockMvc.perform(post("/api/assignments/{id}/complete", assignmentId).with(user("operator"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"actualDurationMinutes\":0}"))
+                .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/assignments/{id}/complete", assignmentId).with(user("operator"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"actualDurationMinutes\":-1}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    private UUID assigned() {
+        ServiceRequestResponse request = queuedRequest();
+        resources.saveAndFlush(Resource.create("Bay " + UUID.randomUUID(), Set.of(serviceType())));
+        return assignmentService.assignNext().assignmentId();
     }
 
     private ServiceRequestResponse queuedRequest() {
