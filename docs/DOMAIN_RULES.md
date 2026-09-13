@@ -29,6 +29,10 @@ Stage statuses are `PENDING`, `ELIGIBLE`, `QUEUED`, `ASSIGNED`, `IN_PROGRESS`, `
 
 Queue entries and assignments are authoritative at the service-stage level. Their request reference is retained where needed for operational history and migration compatibility.
 
+## Service Request Creation
+
+A service request belongs to one vehicle and does not duplicate vehicle information. Creating a request requires an existing vehicle and a non-empty ordered list of existing active service types. The request, its one active workflow, and all supplied stages are created atomically. The first supplied service type is retained as the request's intake type for the existing schema; stage service types remain authoritative for execution. Request creation does not enqueue stages or select resources.
+
 ## Priority and Critical Requests
 
 Priority classes are `CRITICAL`, `URGENT`, `APPOINTMENT`, and `NORMAL`.

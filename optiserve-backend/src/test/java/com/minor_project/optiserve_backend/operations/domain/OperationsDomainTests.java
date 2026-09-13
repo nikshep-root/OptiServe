@@ -7,6 +7,7 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Set;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
 class OperationsDomainTests {
@@ -15,7 +16,7 @@ class OperationsDomainTests {
 
     @Test
     void requestLifecycleRejectsInvalidTransitionsAndDoesNotCancelActiveService() {
-        ServiceRequest request = ServiceRequest.create(serviceType(), PriorityClass.NORMAL, null);
+        ServiceRequest request = ServiceRequest.create(vehicle(), serviceType(), PriorityClass.NORMAL, null);
 
         assertThatIllegalStateException().isThrownBy(() -> request.complete(Duration.ofMinutes(1)));
         request.enqueue();
@@ -132,10 +133,14 @@ class OperationsDomainTests {
     }
 
     private ServiceWorkflow workflow() {
-        return ServiceWorkflow.create(ServiceRequest.create(serviceType(), PriorityClass.NORMAL, null));
+        return ServiceWorkflow.create(ServiceRequest.create(vehicle(), serviceType(), PriorityClass.NORMAL, null));
     }
 
     private ServiceType serviceType() {
         return ServiceType.create("Standard service", "Test service", Duration.ofMinutes(15));
+    }
+
+    private Vehicle vehicle() {
+        return Vehicle.create(UUID.randomUUID(), "KA01AB1234", "Toyota", "Camry", 2024);
     }
 }
