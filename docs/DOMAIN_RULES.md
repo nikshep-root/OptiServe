@@ -39,6 +39,12 @@ Only an `ELIGIBLE` stage may enter the waiting queue. Queueing creates one `WAIT
 
 Only one active queue entry may exist for a stage. Removing a waiting entry marks it `REMOVED` and returns its still-active stage to `ELIGIBLE`; it does not cancel the stage, workflow, or service request. A cancelled stage cannot be queued. Queue-entry time is used later by the scheduler to calculate dynamic waiting estimates.
 
+## Scheduler Selection
+
+The scheduler selects the next current queue candidate but does not assign a resource or mutate queue, stage, or assignment state. Only `WAITING` queue entries whose stages are `QUEUED` are candidates. `CRITICAL` requests always rank ahead of non-critical requests and never preempt an active assignment.
+
+Among requests in the same criticality group, selection uses base priority plus waiting-time aging, a small bonus for a due appointment, and a bounded shorter-predicted-duration adjustment. Missing predicted duration receives no duration adjustment. Waiting time remains dynamically derived from the current time and queue-entry time. Ties are resolved deterministically by earlier queue-entry time, earlier request creation time, then queue-entry UUID.
+
 ## Priority and Critical Requests
 
 Priority classes are `CRITICAL`, `URGENT`, `APPOINTMENT`, and `NORMAL`.
