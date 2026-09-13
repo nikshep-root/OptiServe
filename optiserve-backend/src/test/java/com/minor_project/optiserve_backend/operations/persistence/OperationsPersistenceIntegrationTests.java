@@ -12,6 +12,7 @@ import com.minor_project.optiserve_backend.operations.domain.ServiceStage;
 import com.minor_project.optiserve_backend.operations.domain.ServiceStageStatus;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.ServiceWorkflow;
+import com.minor_project.optiserve_backend.operations.domain.Vehicle;
 import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
@@ -32,6 +33,7 @@ class OperationsPersistenceIntegrationTests {
     @Autowired private ServiceTypeRepository serviceTypes;
     @Autowired private ResourceRepository resources;
     @Autowired private ServiceRequestRepository requests;
+    @Autowired private VehicleRepository vehicles;
     @Autowired private ServiceWorkflowRepository workflows;
     @Autowired private ServiceStageRepository stages;
     @Autowired private QueueEntryRepository queueEntries;
@@ -41,7 +43,7 @@ class OperationsPersistenceIntegrationTests {
     @Test
     void flywayV4CreatesWorkflowSchemaAndHibernatePersistsOrderedStages() {
         ServiceType type = serviceTypes.saveAndFlush(type("Inspection"));
-        ServiceRequest request = requests.saveAndFlush(ServiceRequest.create(type, PriorityClass.URGENT, null));
+        ServiceRequest request = requests.saveAndFlush(request(type, PriorityClass.URGENT));
         ServiceWorkflow workflow = ServiceWorkflow.create(request);
         ServiceStage first = workflow.addStage(type, Duration.ofMinutes(15));
         workflow.addStage(type, Duration.ofMinutes(20));
@@ -64,7 +66,7 @@ class OperationsPersistenceIntegrationTests {
     @Test
     void workflowHasOneUniqueRequest() {
         ServiceType type = serviceTypes.saveAndFlush(type("Diagnostics"));
-        ServiceRequest request = requests.saveAndFlush(ServiceRequest.create(type, PriorityClass.NORMAL, null));
+        ServiceRequest request = requests.saveAndFlush(request(type, PriorityClass.NORMAL));
         ServiceWorkflow workflow = ServiceWorkflow.create(request);
         workflow.addStage(type, null);
         workflows.saveAndFlush(workflow);
@@ -76,7 +78,7 @@ class OperationsPersistenceIntegrationTests {
     @Test
     void stageSequenceIsUniqueWithinWorkflow() {
         ServiceType type = serviceTypes.saveAndFlush(type("Sequence check"));
-        ServiceRequest request = requests.saveAndFlush(ServiceRequest.create(type, PriorityClass.NORMAL, null));
+        ServiceRequest request = requests.saveAndFlush(request(type, PriorityClass.NORMAL));
         ServiceWorkflow workflow = ServiceWorkflow.create(request);
         ServiceStage stage = workflow.addStage(type, null);
         workflows.saveAndFlush(workflow);
@@ -101,7 +103,7 @@ class OperationsPersistenceIntegrationTests {
     @Test
     void stageServiceTypeForeignKeyIsEnforced() {
         ServiceType type = serviceTypes.saveAndFlush(type("Service type foreign key"));
-        ServiceRequest request = requests.saveAndFlush(ServiceRequest.create(type, PriorityClass.NORMAL, null));
+        ServiceRequest request = requests.saveAndFlush(request(type, PriorityClass.NORMAL));
         ServiceWorkflow workflow = ServiceWorkflow.create(request);
         workflows.saveAndFlush(workflow);
 
@@ -116,7 +118,7 @@ class OperationsPersistenceIntegrationTests {
     void queueAndAssignmentUseAuthoritativeStageReferenceAndActiveStageIsUnique() {
         ServiceType type = serviceTypes.saveAndFlush(type("Repair"));
         Resource resource = resources.saveAndFlush(Resource.create("Counter A", Set.of(type)));
-        ServiceRequest request = requests.saveAndFlush(ServiceRequest.create(type, PriorityClass.NORMAL, null));
+        ServiceRequest request = requests.saveAndFlush(request(type, PriorityClass.NORMAL));
         ServiceWorkflow workflow = ServiceWorkflow.create(request);
         ServiceStage stage = workflow.addStage(type, null);
         workflows.saveAndFlush(workflow);
@@ -137,7 +139,7 @@ class OperationsPersistenceIntegrationTests {
     @Test
     void stageRepositoryFindsEligibleAndQueuedStages() {
         ServiceType type = serviceTypes.saveAndFlush(type("Quality check"));
-        ServiceRequest request = requests.saveAndFlush(ServiceRequest.create(type, PriorityClass.NORMAL, null));
+        ServiceRequest request = requests.saveAndFlush(request(type, PriorityClass.NORMAL));
         ServiceWorkflow workflow = ServiceWorkflow.create(request);
         ServiceStage stage = workflow.addStage(type, null);
         workflows.saveAndFlush(workflow);
@@ -149,5 +151,12 @@ class OperationsPersistenceIntegrationTests {
 
     private ServiceType type(String name) {
         return ServiceType.create(name, "Persistence test service", Duration.ofMinutes(15));
+    }
+
+    private ServiceRequest request(ServiceType serviceType, PriorityClass priorityClass) {
+        Vehicle vehicle = vehicles.saveAndFlush(
+                Vehicle.create(UUID.randomUUID(), "KA" + UUID.randomUUID().toString().substring(0, 8),
+                        "Toyota", "Camry", 2024));
+        return ServiceRequest.create(vehicle, serviceType, priorityClass, null);
     }
 }
