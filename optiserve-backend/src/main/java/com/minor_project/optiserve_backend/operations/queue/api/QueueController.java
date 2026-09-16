@@ -1,6 +1,7 @@
 package com.minor_project.optiserve_backend.operations.queue.api;
 
 import com.minor_project.optiserve_backend.operations.queue.application.QueueApplicationService;
+import com.minor_project.optiserve_backend.operations.waittime.application.WaitTimeApplicationService;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
@@ -17,9 +18,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class QueueController {
 
     private final QueueApplicationService queueApplicationService;
+    private final WaitTimeApplicationService waitTimeApplicationService;
 
-    public QueueController(QueueApplicationService queueApplicationService) {
+    public QueueController(
+            QueueApplicationService queueApplicationService,
+            WaitTimeApplicationService waitTimeApplicationService) {
         this.queueApplicationService = queueApplicationService;
+        this.waitTimeApplicationService = waitTimeApplicationService;
     }
 
     @PostMapping("/stages/{stageId}")
@@ -31,6 +36,11 @@ public class QueueController {
     @GetMapping
     public List<QueueEntryResponse> findQueuedStages() {
         return queueApplicationService.findQueuedStages();
+    }
+
+    @GetMapping("/stages/{stageId}/wait-time")
+    public WaitTimeResponse estimateWaitTime(@PathVariable UUID stageId) {
+        return waitTimeApplicationService.estimateWaitTime(stageId);
     }
 
     @DeleteMapping("/stages/{stageId}")
