@@ -819,7 +819,10 @@ erDiagram
     SERVICE_REQUESTS ||--|| SERVICE_WORKFLOWS : "owns"
     SERVICE_WORKFLOWS ||--o{ SERVICE_STAGES : "contains"
     SERVICE_TYPES ||--o{ SERVICE_STAGES : "required by"
-    RESOURCES }o--o{ SERVICE_TYPES : "compatible via capabilities"
+
+    RESOURCES ||--o{ RESOURCE_SERVICE_TYPE_CAPABILITIES : "has"
+    SERVICE_TYPES ||--o{ RESOURCE_SERVICE_TYPE_CAPABILITIES : "supports"
+
     SERVICE_STAGES ||--o| QUEUE_ENTRIES : "waits as"
     SERVICE_STAGES ||--o{ ASSIGNMENTS : "executed through"
     RESOURCES ||--o{ ASSIGNMENTS : "performs"
@@ -854,7 +857,7 @@ erDiagram
 
     SERVICE_WORKFLOWS {
         UUID id PK
-        UUID service_request_id FK UK
+        UUID service_request_id FK, UK
         enum status
     }
 
@@ -872,6 +875,11 @@ erDiagram
         UUID id PK
         string name UK
         enum status
+    }
+
+    RESOURCE_SERVICE_TYPE_CAPABILITIES {
+        UUID resource_id FK
+        UUID service_type_id FK
     }
 
     QUEUE_ENTRIES {
