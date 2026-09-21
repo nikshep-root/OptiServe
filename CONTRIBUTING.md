@@ -93,3 +93,9 @@ Use clear, active, and descriptive commit messages. Examples:
 
 ### Questions
 If you are unsure about an implementation pattern, always discuss it with the team first before introducing any major architectural changes.
+At last add - 
+
+
+## Reporting Issues
+
+When reporting an issue, include the steps to reproduce the problem, expected behaviour and actual behaviour whenever possible.
