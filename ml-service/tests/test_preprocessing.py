@@ -1,8 +1,6 @@
-from datetime import datetime
-
 import pandas as pd
 
-from app.features import FEATURE_COLUMNS, build_feature_frame
+from app.features import DEFAULT_REFERENCE_YEAR, FEATURE_COLUMNS, build_feature_frame
 
 
 def test_build_feature_frame_computes_vehicle_age():
@@ -12,7 +10,7 @@ def test_build_feature_frame_computes_vehicle_age():
                 "serviceType": "Engine Service",
                 "vehicleMake": "Hyundai",
                 "vehicleModel": "i20",
-                "vehicleYear": datetime.now().year - 4,
+                "vehicleYear": DEFAULT_REFERENCE_YEAR - 4,
                 "dayOfWeek": "MONDAY",
             }
         ]
@@ -31,7 +29,7 @@ def test_build_feature_frame_clips_negative_age_to_zero():
                 "serviceType": "Oil Change",
                 "vehicleMake": "Tata",
                 "vehicleModel": "Nexon",
-                "vehicleYear": datetime.now().year + 5,  # bogus future year
+                "vehicleYear": DEFAULT_REFERENCE_YEAR + 5,  # bogus future year
                 "dayOfWeek": "FRIDAY",
             }
         ]

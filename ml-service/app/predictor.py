@@ -1,7 +1,7 @@
 import pandas as pd
 
 from app.features import build_feature_frame
-from app.model_loader import get_model
+from app.model_loader import get_model, get_reference_year
 from app.schemas import PredictionRequest
 
 # Predictions are advisory estimates, not ground truth — never let a noisy
@@ -21,7 +21,7 @@ def predict_duration(request: PredictionRequest) -> int:
             }
         ]
     )
-    features = build_feature_frame(raw)
+    features = build_feature_frame(raw, reference_year=get_reference_year())
 
     model = get_model()
     prediction = float(model.predict(features)[0])

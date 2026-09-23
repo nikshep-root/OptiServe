@@ -76,8 +76,10 @@ python training/train.py
    - **Random Forest Regressor** (200 trees)
 5. Evaluates both on the validation split with MAE, RMSE, and R².
 6. Selects the model with the **lower validation MAE**.
-7. Persists the winner to `model/service_duration_model.joblib` via `joblib`.
-8. Writes both models' metrics to `model/metrics.json` for reference.
+7. Refits the selected pipeline on the full labeled dataset.
+8. Persists the winner and its fixed `reference_year` to
+   `model/service_duration_model.joblib` via `joblib`.
+9. Writes both models' validation metrics to `model/metrics.json` for reference.
 
 ## 4. Evaluation
 

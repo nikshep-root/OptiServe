@@ -16,7 +16,7 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))  # allow `import app.*` when run as a script
 
-from app.features import build_feature_frame  # noqa: E402
+from app.features import DEFAULT_REFERENCE_YEAR, build_feature_frame  # noqa: E402
 
 MODEL_PATH = REPO_ROOT / "model" / "service_duration_model.joblib"
 DATA_PATH = REPO_ROOT / "data" / "service_history.csv"
@@ -39,9 +39,16 @@ if __name__ == "__main__":
     if not MODEL_PATH.exists():
         raise SystemExit("No persisted model found. Run training/train.py first.")
 
-    model = joblib.load(MODEL_PATH)
+    artifact = joblib.load(MODEL_PATH)
+    if isinstance(artifact, dict) and "pipeline" in artifact:
+        model = artifact["pipeline"]
+        reference_year = int(artifact.get("reference_year", DEFAULT_REFERENCE_YEAR))
+    else:
+        model = artifact
+        reference_year = DEFAULT_REFERENCE_YEAR
+
     df = pd.read_csv(DATA_PATH)
-    X = build_feature_frame(df)
+    X = build_feature_frame(df, reference_year=reference_year)
     y = df["durationMinutes"]
 
     # NOTE: this re-evaluates on the full dataset (not a held-out split),

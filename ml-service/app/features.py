@@ -4,13 +4,12 @@ Keeping this in one place guarantees train-time and inference-time features
 are computed identically.
 """
 
-from datetime import datetime
-
 import pandas as pd
 
 CATEGORICAL_FEATURES = ["serviceType", "vehicleMake", "vehicleModel", "dayOfWeek"]
 NUMERIC_FEATURES = ["vehicleAge"]
 FEATURE_COLUMNS = CATEGORICAL_FEATURES + NUMERIC_FEATURES
+DEFAULT_REFERENCE_YEAR = 2026
 
 VALID_DAYS_OF_WEEK = {
     "MONDAY", "TUESDAY", "WEDNESDAY", "THURSDAY",
@@ -18,11 +17,7 @@ VALID_DAYS_OF_WEEK = {
 }
 
 
-def _current_year() -> int:
-    return datetime.now().year
-
-
-def build_feature_frame(raw: pd.DataFrame) -> pd.DataFrame:
+def build_feature_frame(raw: pd.DataFrame, reference_year: int = DEFAULT_REFERENCE_YEAR) -> pd.DataFrame:
     """
     Takes a DataFrame with raw columns
     [serviceType, vehicleMake, vehicleModel, vehicleYear, dayOfWeek]
@@ -30,7 +25,7 @@ def build_feature_frame(raw: pd.DataFrame) -> pd.DataFrame:
     was trained on: categoricals + engineered vehicleAge.
     """
     df = raw.copy()
-    df["vehicleAge"] = _current_year() - df["vehicleYear"]
+    df["vehicleAge"] = reference_year - df["vehicleYear"]
     # Guard against future-dated years producing a negative age.
     df["vehicleAge"] = df["vehicleAge"].clip(lower=0)
     return df[FEATURE_COLUMNS]

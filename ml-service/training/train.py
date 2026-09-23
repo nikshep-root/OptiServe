@@ -23,7 +23,12 @@ from sklearn.preprocessing import OneHotEncoder
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))  # allow `import app.*` when run as a script
 
-from app.features import CATEGORICAL_FEATURES, NUMERIC_FEATURES, build_feature_frame  # noqa: E402
+from app.features import (  # noqa: E402
+    CATEGORICAL_FEATURES,
+    DEFAULT_REFERENCE_YEAR,
+    NUMERIC_FEATURES,
+    build_feature_frame,
+)
 from training.evaluate import evaluate_model  # noqa: E402
 
 DATA_PATH = REPO_ROOT / "data" / "service_history.csv"
@@ -46,7 +51,7 @@ def main():
     df = pd.read_csv(DATA_PATH)
 
     y = df["durationMinutes"]
-    X = build_feature_frame(df)
+    X = build_feature_frame(df, reference_year=DEFAULT_REFERENCE_YEAR)
 
     X_train, X_val, y_train, y_val = train_test_split(
         X, y, test_size=0.2, random_state=RANDOM_STATE
@@ -85,9 +90,16 @@ def main():
     # Lower MAE wins.
     best_name = min(results, key=lambda name: results[name]["mae"])
     best_pipeline = candidates[best_name]
+    best_pipeline.fit(X, y)
 
     MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(best_pipeline, MODEL_PATH)
+    joblib.dump(
+        {
+            "pipeline": best_pipeline,
+            "reference_year": DEFAULT_REFERENCE_YEAR,
+        },
+        MODEL_PATH,
+    )
 
     METRICS_PATH.write_text(
         json.dumps({"selected_model": best_name, "results": results}, indent=2)
