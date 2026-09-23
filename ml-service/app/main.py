@@ -9,9 +9,6 @@ from app.schemas import PredictionRequest, PredictionResponse
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Fail fast and loudly at boot if training hasn't been run yet, rather
-    # than on the first request.
-    get_model()
     yield
 
 
