@@ -30,6 +30,15 @@ def health():
     return {"status": "ok"}
 
 
+@app.get("/ready")
+def ready():
+    try:
+        get_model()
+    except ModelNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"status": "ready"}
+
+
 @app.post("/predict-duration", response_model=PredictionResponse)
 def predict_duration_endpoint(request: PredictionRequest) -> PredictionResponse:
     try:

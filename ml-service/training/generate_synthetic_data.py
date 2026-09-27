@@ -10,12 +10,16 @@ Run: python training/generate_synthetic_data.py
 """
 
 import csv
-import random
 from pathlib import Path
+import random
+import sys
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from app.features import DEFAULT_REFERENCE_YEAR, MAX_VEHICLE_YEAR, MIN_VEHICLE_YEAR
 
 random.seed(42)
-
-REFERENCE_YEAR = 2026
 
 # Base duration (minutes) per service type — this is the dominant signal.
 SERVICE_TYPE_BASE_DURATION = {
@@ -59,11 +63,11 @@ def sample_row():
     service_type = random.choice(list(SERVICE_TYPE_BASE_DURATION.keys()))
     make = random.choice(list(MAKE_MODELS.keys()))
     model = random.choice(MAKE_MODELS[make])
-    year = random.randint(REFERENCE_YEAR - 18, REFERENCE_YEAR)
+    year = random.randint(MIN_VEHICLE_YEAR, MAX_VEHICLE_YEAR)
     day = random.choice(DAYS_OF_WEEK)
 
     base = SERVICE_TYPE_BASE_DURATION[service_type]
-    vehicle_age = REFERENCE_YEAR - year
+    vehicle_age = DEFAULT_REFERENCE_YEAR - year
 
     # Older vehicles take a bit longer (worn parts, more diagnostics).
     age_factor = 1.0 + min(vehicle_age, 15) * 0.012

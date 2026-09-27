@@ -121,13 +121,20 @@ Response:
 }
 ```
 
-Invalid input (bad `dayOfWeek`, missing field, out-of-range `vehicleYear`)
-returns `422`. If the model hasn't been trained yet, the API returns `503`
-with a message telling you to run `training/train.py`.
+Invalid input (bad `dayOfWeek`, missing field, out-of-range `vehicleYear` outside
+the supported 2008–2026 range) returns `422`. If the model is missing or cannot be loaded,
+the API returns `503` with a descriptive error message.
 
 ### `GET /health`
 
-Basic liveness check — returns `{"status": "ok"}`.
+Liveness probe — returns `{"status": "ok"}` when the FastAPI process is running.
+It does not check or depend on ML model availability.
+
+### `GET /ready`
+
+Readiness probe — checks whether the trained ML model is available and can be loaded.
+Returns `{"status": "ready"}` with HTTP 200 when ready to serve predictions, or HTTP 503
+when the model is missing, unavailable, corrupt, or cannot be loaded.
 
 ## 6. Tests
 
@@ -138,19 +145,20 @@ pytest tests/ -v
 - `tests/test_preprocessing.py` — feature engineering (vehicle age
   computation, negative-age clipping, categorical pass-through).
 - `tests/test_predictor.py` — end-to-end API tests via FastAPI's
-  `TestClient`: valid predictions are positive integers, repeated calls with
-  the same input are deterministic, invalid input is rejected with `422`,
-  and unseen categorical values (e.g. a make not in the training set) are
-  handled gracefully instead of raising.
+  `TestClient`: liveness (`/health`), readiness (`/ready`) when model is available
+  vs unavailable/corrupt (HTTP 503), prediction availability and 503 handling,
+  supported `vehicleYear` range acceptance (2008–2026) and boundary rejections (HTTP 422),
+  positive integer predictions, deterministic outputs, invalid field handling,
+  and graceful unseen categorical values.
 
 ## 7. Project structure
 
 ```
 ml-service/
 ├── app/
-│   ├── main.py           # FastAPI app + /predict-duration, /health
+│   ├── main.py           # FastAPI app + /predict-duration, /health, /ready
 │   ├── schemas.py         # Pydantic request/response models + validation
-│   ├── features.py         # Shared feature engineering (train + inference)
+│   ├── features.py         # Shared feature engineering + vehicle year range
 │   ├── predictor.py         # Builds features, calls model, clamps output
 │   └── model_loader.py       # Loads/caches the persisted joblib model
 ├── model/
@@ -165,9 +173,11 @@ ml-service/
 ├── tests/
 │   ├── test_preprocessing.py
 │   └── test_predictor.py
+├── pytest.ini
 ├── requirements.txt
 └── README.md
 ```
+
 
 ## 8. Explicitly out of scope for this phase
 
