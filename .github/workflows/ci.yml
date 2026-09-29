@@ -1,3 +1,4 @@
+
 name: CI
 
 on:
@@ -11,6 +12,10 @@ on:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
@@ -35,8 +40,10 @@ jobs:
       - name: Verify Java version
         run: java --version
 
-      - name: Run tests
-        run: ./mvnw --batch-mode test
+      - name: Verify Maven Wrapper
+        run: |
+          test -f .mvn/wrapper/maven-wrapper.properties
+          test -x ./mvnw
 
-      - name: Build application
-        run: ./mvnw --batch-mode package
+      - name: Build and Test
+        run: ./mvnw --batch-mode clean verify
