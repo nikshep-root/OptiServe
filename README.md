@@ -920,6 +920,16 @@ erDiagram
 | `PATCH` | `/api/service-types/{id}` | Update service type |
 | `DELETE` | `/api/service-types/{id}` | Delete/deactivate service type |
 
+## Authentication
+
+`POST /api/auth/register` creates an account and returns an access token. `POST /api/auth/login` returns a token for valid credentials. Both accept JSON such as:
+
+```json
+{"email":"operator@example.com","password":"a-long-password"}
+```
+
+Send the token as `Authorization: Bearer <accessToken>` for other API endpoints. Passwords are BCrypt-hashed and tokens expire after one hour.
+
 ## Resources
 
 | Method | Endpoint | Purpose |
@@ -973,7 +983,7 @@ Service-request creation creates the workflow and ordered stages atomically. It 
 | Spring Data JPA | Persistence |
 | PostgreSQL | Relational database |
 | Flyway | Database migrations |
-| Spring Security | Stateless HTTP Basic security baseline |
+| Spring Security + JJWT | Stateless JWT bearer authentication |
 | Jakarta Bean Validation | Request validation |
 | Lombok | Java boilerplate reduction |
 | Maven Wrapper | Build and dependency management |
@@ -1063,6 +1073,7 @@ The application expects:
 OPTISERVE_DB_URL
 OPTISERVE_DB_USERNAME
 OPTISERVE_DB_PASSWORD
+OPTISERVE_JWT_SECRET
 ```
 
 Example:
@@ -1073,7 +1084,17 @@ OPTISERVE_DB_USERNAME=postgres
 OPTISERVE_DB_PASSWORD=<your-local-password>
 ```
 
-Do not commit real credentials.
+Set `OPTISERVE_JWT_SECRET` to a Base64-encoded random value of at least 32 bytes. Example for the current PowerShell session:
+
+```powershell
+$bytes = New-Object byte[] 32
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+$rng.GetBytes($bytes)
+$rng.Dispose()
+$env:OPTISERVE_JWT_SECRET = [Convert]::ToBase64String($bytes)
+```
+
+`application.properties` reads this environment variable; do not commit real database credentials or JWT signing keys.
 
 The application is configured to:
 
