@@ -1,4 +1,3 @@
-
 name: CI
 
 on:
@@ -21,6 +20,26 @@ jobs:
   build-and-test:
     name: Build and Test
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: optiserve
+          POSTGRES_USER: optiserve
+          POSTGRES_PASSWORD: optiserve
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd="pg_isready -U optiserve -d optiserve"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    env:
+      OPTISERVE_DB_URL: jdbc:postgresql://localhost:5432/optiserve
+      OPTISERVE_DB_USERNAME: optiserve
+      OPTISERVE_DB_PASSWORD: optiserve
 
     defaults:
       run:
