@@ -602,9 +602,19 @@ V3  case-insensitive resource names
 V4  add service workflows and stages
 V5  create vehicles
 V6  add vehicle to service requests
+V7  add authentication users
+V8  link users, customers, and vehicles
 ```
 
 ## Tables
+
+### `users`
+
+Authentication-related account data: `id`, unique `email`, `password_hash`, `role`, `enabled`, and timestamps.
+
+### `customers`
+
+Customer profile data: `id`, `user_id`, `name`, optional `phone`, and timestamps. Each customer is linked to one user (`user_id` is unique).
 
 ### `service_types`
 
@@ -708,7 +718,7 @@ Important fields:
 - `year`
 - timestamps
 
-The `customer_id` is currently an external identifier. A dedicated customer domain has not yet been introduced.
+Each vehicle belongs to a customer through `customer_id`, which references `customers.id`.
 
 Registration numbers are normalized and unique.
 
@@ -814,6 +824,8 @@ Partial unique indexes prevent:
 
 ```mermaid
 erDiagram
+    USERS ||--o| CUSTOMERS : "owns profile"
+    CUSTOMERS ||--o{ VEHICLES : "owns"
     VEHICLES ||--o{ SERVICE_REQUESTS : "has"
     SERVICE_TYPES ||--o{ SERVICE_REQUESTS : "intake type"
     SERVICE_REQUESTS ||--|| SERVICE_WORKFLOWS : "owns"
@@ -827,9 +839,28 @@ erDiagram
     SERVICE_STAGES ||--o{ ASSIGNMENTS : "executed through"
     RESOURCES ||--o{ ASSIGNMENTS : "performs"
 
+    USERS {
+        UUID id PK
+        string email UK
+        string password_hash
+        string role
+        boolean enabled
+        timestamp created_at
+        timestamp updated_at
+    }
+
+    CUSTOMERS {
+        UUID id PK
+        UUID user_id FK, UK
+        string name
+        string phone
+        timestamp created_at
+        timestamp updated_at
+    }
+
     VEHICLES {
         UUID id PK
-        UUID customer_id
+        UUID customer_id FK
         string registration_number UK
         string make
         string model

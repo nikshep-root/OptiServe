@@ -13,6 +13,10 @@ import com.minor_project.optiserve_backend.operations.domain.ServiceRequest;
 import com.minor_project.optiserve_backend.operations.domain.ServiceStageStatus;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
+import com.minor_project.optiserve_backend.authentication.persistence.AuthUserRepository;
+import com.minor_project.optiserve_backend.customer.CustomerTestFixtures;
+import com.minor_project.optiserve_backend.customer.domain.Customer;
+import com.minor_project.optiserve_backend.customer.persistence.CustomerRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceRequestRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceTypeRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceWorkflowRepository;
@@ -39,6 +43,8 @@ class ServiceRequestControllerIntegrationTests {
     @Autowired private MockMvc mockMvc;
     @Autowired private ObjectMapper objectMapper;
     @Autowired private VehicleRepository vehicleRepository;
+    @Autowired private AuthUserRepository users;
+    @Autowired private CustomerRepository customers;
     @Autowired private ServiceTypeRepository serviceTypeRepository;
     @Autowired private ServiceRequestRepository serviceRequestRepository;
     @Autowired private ServiceWorkflowRepository serviceWorkflowRepository;
@@ -143,7 +149,8 @@ class ServiceRequestControllerIntegrationTests {
     }
 
     private Vehicle vehicle() {
-        return Vehicle.create(UUID.randomUUID(), "KA01AB1234", "Toyota", "Camry", 2024);
+        Customer customer = CustomerTestFixtures.createPersistedCustomer(users, customers);
+        return Vehicle.create(customer, "KA01AB1234", "Toyota", "Camry", 2024);
     }
 
     private ServiceType serviceType(String name) {

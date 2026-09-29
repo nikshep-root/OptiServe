@@ -16,6 +16,9 @@ import com.minor_project.optiserve_backend.operations.domain.ServiceStage;
 import com.minor_project.optiserve_backend.operations.domain.ServiceStageStatus;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
+import com.minor_project.optiserve_backend.authentication.persistence.AuthUserRepository;
+import com.minor_project.optiserve_backend.customer.CustomerTestFixtures;
+import com.minor_project.optiserve_backend.customer.persistence.CustomerRepository;
 import com.minor_project.optiserve_backend.operations.persistence.QueueEntryRepository;
 import com.minor_project.optiserve_backend.operations.persistence.AssignmentRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ResourceRepository;
@@ -44,6 +47,8 @@ class QueueControllerIntegrationTests {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private VehicleRepository vehicleRepository;
+    @Autowired private AuthUserRepository users;
+    @Autowired private CustomerRepository customers;
     @Autowired private ServiceTypeRepository serviceTypeRepository;
     @Autowired private ServiceStageRepository serviceStageRepository;
     @Autowired private QueueEntryRepository queueEntryRepository;
@@ -181,7 +186,8 @@ class QueueControllerIntegrationTests {
 
     private ServiceRequestResponse createRequest(PriorityClass priority, int stageCount, ServiceType serviceType) {
         Vehicle vehicle = vehicleRepository.saveAndFlush(Vehicle.create(
-                UUID.randomUUID(), "KA01AB" + UUID.randomUUID().toString().substring(0, 6), "Toyota", "Camry", 2024));
+                CustomerTestFixtures.createPersistedCustomer(users, customers),
+                "KA01AB" + UUID.randomUUID().toString().substring(0, 6), "Toyota", "Camry", 2024));
         return serviceRequestApplicationService.create(new CreateServiceRequestRequest(
                 vehicle.getId(), priority, null,
                 java.util.Collections.nCopies(stageCount, serviceType.getId())));
