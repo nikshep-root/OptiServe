@@ -2,6 +2,7 @@ package com.minor_project.optiserve_backend.authentication.api;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -36,6 +37,7 @@ class AuthSecurityIntegrationTests {
 
     private static final String TEST_SECRET = "VGhpc0lzQVRlc3RPbmx5U2VjcmV0S2V5Rm9ySFRUUFN";
     private static final String PASSWORD = "correct-horse-battery";
+    private static final String MALFORMED_TOKEN = "not-a-jwt";
 
     @Autowired private MockMvc mockMvc;
     @Autowired private ObjectMapper objectMapper;
@@ -100,6 +102,12 @@ class AuthSecurityIntegrationTests {
     }
 
     @Test
+    void rejectsMalformedBearerJwtWithApiErrorJson() throws Exception {
+        expectUnauthorized(mockMvc.perform(get("/api/resources")
+                .header("Authorization", "Bearer " + MALFORMED_TOKEN)));
+    }
+
+    @Test
     void disabledUserCannotAuthenticateWithPreviouslyIssuedToken() throws Exception {
         jdbcTemplate.update("UPDATE users SET enabled = FALSE WHERE email = ?", protectedEmail);
 
@@ -114,6 +122,7 @@ class AuthSecurityIntegrationTests {
         mockMvc.perform(get("/api/admin/secret")
                         .header("Authorization", "Bearer " + protectedToken))
                 .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(403))
                 .andExpect(jsonPath("$.error").value("Forbidden"))
                 .andExpect(jsonPath("$.message").value("You do not have permission to access this resource."))
@@ -125,6 +134,7 @@ class AuthSecurityIntegrationTests {
     private void expectUnauthorized(ResultActions request) throws Exception {
         request
                 .andExpect(status().isUnauthorized())
+                .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
                 .andExpect(jsonPath("$.status").value(401))
                 .andExpect(jsonPath("$.error").value("Unauthorized"))
                 .andExpect(jsonPath("$.message").value("Authentication is required to access this resource."))
