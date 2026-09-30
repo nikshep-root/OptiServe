@@ -8,6 +8,10 @@ import com.minor_project.optiserve_backend.operations.domain.PriorityClass;
 import com.minor_project.optiserve_backend.operations.domain.Resource;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
+import com.minor_project.optiserve_backend.authentication.persistence.AuthUserRepository;
+import com.minor_project.optiserve_backend.customer.CustomerTestFixtures;
+import com.minor_project.optiserve_backend.customer.domain.Customer;
+import com.minor_project.optiserve_backend.customer.persistence.CustomerRepository;
 import com.minor_project.optiserve_backend.operations.persistence.AssignmentRepository;
 import com.minor_project.optiserve_backend.operations.persistence.QueueEntryRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ResourceRepository;
@@ -41,6 +45,8 @@ class AssignmentConcurrencyIntegrationTests {
     @Autowired private QueueApplicationService queue;
     @Autowired private ServiceTypeRepository serviceTypes;
     @Autowired private VehicleRepository vehicles;
+    @Autowired private AuthUserRepository users;
+    @Autowired private CustomerRepository customers;
     @Autowired private ResourceRepository resources;
     @Autowired private AssignmentRepository assignments;
     @Autowired private QueueEntryRepository queueEntries;
@@ -51,6 +57,8 @@ class AssignmentConcurrencyIntegrationTests {
     private UUID resourceId;
     private UUID serviceTypeId;
     private final List<UUID> vehicleIds = new java.util.ArrayList<>();
+    private final List<UUID> customerIds = new java.util.ArrayList<>();
+    private final List<UUID> userIds = new java.util.ArrayList<>();
     private final List<UUID> requestIds = new java.util.ArrayList<>();
     private final List<UUID> workflowIds = new java.util.ArrayList<>();
     private final List<UUID> stageIds = new java.util.ArrayList<>();
@@ -93,12 +101,18 @@ class AssignmentConcurrencyIntegrationTests {
         workflows.deleteAllById(workflowIds);
         requests.deleteAllById(requestIds);
         vehicles.deleteAllById(vehicleIds);
+        customers.deleteAllById(customerIds);
+        users.deleteAllById(userIds);
         resources.deleteById(resourceId);
         serviceTypes.deleteById(serviceTypeId);
     }
 
     private void queuedRequest(ServiceType type) {
-        Vehicle vehicle = vehicles.saveAndFlush(Vehicle.create(UUID.randomUUID(), "KA" + UUID.randomUUID().toString().substring(0, 8), "Toyota", "Camry", 2024));
+        Customer customer = CustomerTestFixtures.createPersistedCustomer(users, customers);
+        customerIds.add(customer.getId());
+        userIds.add(customer.getUser().getId());
+        Vehicle vehicle = vehicles.saveAndFlush(Vehicle.create(
+                customer, "KA" + UUID.randomUUID().toString().substring(0, 8), "Toyota", "Camry", 2024));
         vehicleIds.add(vehicle.getId());
         ServiceRequestResponse request = serviceRequests.create(new CreateServiceRequestRequest(vehicle.getId(), PriorityClass.NORMAL, null, List.of(type.getId())));
         requestIds.add(request.id());

@@ -13,6 +13,10 @@ import com.minor_project.optiserve_backend.operations.domain.ServiceStageStatus;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.ServiceWorkflow;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
+import com.minor_project.optiserve_backend.authentication.persistence.AuthUserRepository;
+import com.minor_project.optiserve_backend.customer.domain.Customer;
+import com.minor_project.optiserve_backend.customer.persistence.CustomerRepository;
+import com.minor_project.optiserve_backend.customer.CustomerTestFixtures;
 import com.minor_project.optiserve_backend.operations.assignment.application.AssignmentApplicationService;
 import java.sql.Timestamp;
 import java.time.Duration;
@@ -35,6 +39,8 @@ class OperationsPersistenceIntegrationTests {
     @Autowired private ResourceRepository resources;
     @Autowired private ServiceRequestRepository requests;
     @Autowired private VehicleRepository vehicles;
+    @Autowired private AuthUserRepository users;
+    @Autowired private CustomerRepository customers;
     @Autowired private ServiceWorkflowRepository workflows;
     @Autowired private ServiceStageRepository stages;
     @Autowired private QueueEntryRepository queueEntries;
@@ -202,8 +208,12 @@ class OperationsPersistenceIntegrationTests {
 
     private ServiceRequest request(ServiceType serviceType, PriorityClass priorityClass) {
         Vehicle vehicle = vehicles.saveAndFlush(
-                Vehicle.create(UUID.randomUUID(), "KA" + UUID.randomUUID().toString().substring(0, 8),
+                Vehicle.create(customer(), "KA" + UUID.randomUUID().toString().substring(0, 8),
                         "Toyota", "Camry", 2024));
         return ServiceRequest.create(vehicle, serviceType, priorityClass, null);
+    }
+
+    private Customer customer() {
+        return CustomerTestFixtures.createPersistedCustomer(users, customers);
     }
 }
