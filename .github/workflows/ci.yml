@@ -37,9 +37,10 @@ jobs:
           --health-retries=20
 
     env:
-      OPTISERVE_DB_URL: jdbc:postgresql://localhost:5432/optiserve
-      OPTISERVE_DB_USERNAME: optiserve
-      OPTISERVE_DB_PASSWORD: optiserve
+         OPTISERVE_DB_URL: jdbc:postgresql://localhost:5432/optiserve
+         OPTISERVE_DB_USERNAME: optiserve
+         OPTISERVE_DB_PASSWORD: optiserve
+         OPTISERVE_JWT_SECRET: VGhpc0lzQVRlc3RTZWNyZXRGb3JDb25maWd1cmF0aW9u
 
     defaults:
       run:
