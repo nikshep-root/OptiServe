@@ -13,6 +13,9 @@ import com.minor_project.optiserve_backend.operations.domain.ResourceStatus;
 import com.minor_project.optiserve_backend.operations.domain.ServiceStageStatus;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
+import com.minor_project.optiserve_backend.authentication.persistence.AuthUserRepository;
+import com.minor_project.optiserve_backend.customer.CustomerTestFixtures;
+import com.minor_project.optiserve_backend.customer.persistence.CustomerRepository;
 import com.minor_project.optiserve_backend.operations.persistence.AssignmentRepository;
 import com.minor_project.optiserve_backend.operations.persistence.QueueEntryRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ResourceRepository;
@@ -42,6 +45,8 @@ class AssignmentControllerIntegrationTests {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private VehicleRepository vehicles;
+    @Autowired private AuthUserRepository users;
+    @Autowired private CustomerRepository customers;
     @Autowired private ServiceTypeRepository serviceTypes;
     @Autowired private ResourceRepository resources;
     @Autowired private ServiceStageRepository stages;
@@ -131,7 +136,9 @@ class AssignmentControllerIntegrationTests {
 
     private ServiceRequestResponse queuedRequest() {
         ServiceType type = serviceTypes.saveAndFlush(ServiceType.create("Inspection " + UUID.randomUUID(), null, Duration.ofMinutes(15)));
-        Vehicle vehicle = vehicles.saveAndFlush(Vehicle.create(UUID.randomUUID(), "KA" + UUID.randomUUID().toString().substring(0, 8), "Toyota", "Camry", 2024));
+        Vehicle vehicle = vehicles.saveAndFlush(Vehicle.create(
+                CustomerTestFixtures.createPersistedCustomer(users, customers),
+                "KA" + UUID.randomUUID().toString().substring(0, 8), "Toyota", "Camry", 2024));
         ServiceRequestResponse request = serviceRequests.create(new CreateServiceRequestRequest(
                 vehicle.getId(), PriorityClass.NORMAL, null, List.of(type.getId())));
         queue.queueStage(request.stages().getFirst().id());

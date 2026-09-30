@@ -27,7 +27,7 @@ class VehicleDomainTests {
         UUID customerId = UUID.randomUUID();
 
         assertThatNullPointerException()
-                .isThrownBy(() -> Vehicle.create(null, "KA01AB1234", "Toyota", "Camry", 2024));
+                .isThrownBy(() -> Vehicle.create((UUID) null, "KA01AB1234", "Toyota", "Camry", 2024));
         assertThatIllegalArgumentException()
                 .isThrownBy(() -> Vehicle.create(customerId, " ", "Toyota", "Camry", 2024));
         assertThatIllegalArgumentException()

@@ -1,10 +1,14 @@
 package com.minor_project.optiserve_backend.operations.domain;
 
+import com.minor_project.optiserve_backend.customer.domain.Customer;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.FetchType;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
 import jakarta.persistence.PrePersist;
 import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
@@ -26,8 +30,9 @@ public class Vehicle {
     private UUID id;
 
     @NotNull
-    @Column(name = "customer_id", nullable = false)
-    private UUID customerId;
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "customer_id", nullable = false)
+    private Customer customer;
 
     @NotBlank
     @Size(max = 32)
@@ -58,8 +63,8 @@ public class Vehicle {
     protected Vehicle() {
     }
 
-    private Vehicle(UUID customerId, String registrationNumber, String make, String model, Integer year) {
-        this.customerId = Objects.requireNonNull(customerId, "customerId must not be null");
+    private Vehicle(Customer customer, String registrationNumber, String make, String model, Integer year) {
+        this.customer = Objects.requireNonNull(customer, "customer must not be null");
         this.registrationNumber = requireRegistrationNumber(registrationNumber);
         this.make = requireText(make, "make", 100);
         this.model = requireText(model, "model", 100);
@@ -68,8 +73,12 @@ public class Vehicle {
         this.updatedAt = createdAt;
     }
 
+    public static Vehicle create(Customer customer, String registrationNumber, String make, String model, Integer year) {
+        return new Vehicle(customer, registrationNumber, make, model, year);
+    }
+
     public static Vehicle create(UUID customerId, String registrationNumber, String make, String model, Integer year) {
-        return new Vehicle(customerId, registrationNumber, make, model, year);
+        return create(Customer.reference(customerId), registrationNumber, make, model, year);
     }
 
     public UUID getId() {
@@ -77,7 +86,11 @@ public class Vehicle {
     }
 
     public UUID getCustomerId() {
-        return customerId;
+        return customer.getId();
+    }
+
+    public Customer getCustomer() {
+        return customer;
     }
 
     public String getRegistrationNumber() {
