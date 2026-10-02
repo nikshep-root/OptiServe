@@ -1,0 +1,9 @@
+OptiServeSedan.glb
+
+Source: Kenney Car Kit
+https://kenney.nl/assets/car-kit
+
+License: CC0 1.0 Universal (Public Domain Dedication)
+https://creativecommons.org/publicdomain/zero/1.0/
+
+This asset is a low-poly sedan prototype. The model exposes a body node and four wheel nodes. It does not include independently named doors, hood, or animation clips; OptiServe's experience only animates the available body and wheel geometry.

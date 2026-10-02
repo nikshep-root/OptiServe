@@ -1,0 +1,11 @@
+FREE Concept Car 038 - public domain (CC0)
+
+Source metadata embedded in the GLB:
+https://sketchfab.com/3d-models/free-concept-car-038-public-domain-cc0-0b4ca2a15ba7478db2a42ac9f0e687bf
+
+Embedded author: Unity Fan youtube channel (https://sketchfab.com/unityfan777)
+Embedded license field: SKETCHFAB Standard
+
+The downloaded filename and source title identify this asset as public domain / CC0, but the embedded metadata also contains a Sketchfab Standard license field. Verify the upstream listing and retain this attribution before production redistribution.
+
+Asset limitation: the GLB exposes four wheel assembly groups and many body-color/headlight/chrome meshes, but does not expose semantic door or hood nodes and contains no animation clips. OptiServe animates the verified wheel assemblies and named mesh groups only.
