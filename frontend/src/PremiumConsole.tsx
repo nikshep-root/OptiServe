@@ -8,6 +8,7 @@ import type { AssignmentNextResponse, QueueEntry, Resource, ServiceRequest, Serv
 type View = 'overview' | 'requests' | 'queue' | 'assignments' | 'resources' | 'types'
 type Data = { requests: ServiceRequest[]; queue: QueueEntry[]; resources: Resource[]; types: ServiceType[] }
 const blank: Data = { requests: [], queue: [], resources: [], types: [] }
+const brandLogoPath = '/OptiServe%20Automotive%20Tech%20Logo.png'
 const navigation: Array<{ id: View; label: string; icon: typeof Activity }> = [
   { id: 'overview', label: 'Overview', icon: CircleGauge },
   { id: 'requests', label: 'Service requests', icon: CarFront },
@@ -47,7 +48,7 @@ export default function PremiumConsole({ onSignOut }: { onSignOut: () => void })
     <div className="aurora aurora-two" />
     <div className="grain" />
     <header className="site-header">
-      <div className="premium-brand"><span className="brand-orbit"><Orbit size={18} /></span><span>OPTISERVE</span></div>
+      <div className="premium-brand"><img className="brand-logo brand-logo-console" src={brandLogoPath} alt="OptiServe" draggable={false} /></div>
       <nav className="center-nav" aria-label="Primary navigation">{navigation.map(({ id, label, icon: Icon }) => <button key={id} className={view === id ? 'center-nav-item active' : 'center-nav-item'} onClick={() => navigate(`/${id}`)}><Icon size={14} /><span>{label}</span></button>)}</nav>
       <div className="site-actions"><span className="sync-badge"><span className="pulse" /> {syncError ? 'SYNC PAUSED' : 'LIVE SYNC'}</span><button className="refresh-button" onClick={refresh} aria-label="Refresh data"><RefreshCw size={16} className={loading ? 'spinning' : ''} /></button><button className="signout-button" onClick={onSignOut}>Sign out <ArrowUpRight size={13} /></button></div>
     </header>
