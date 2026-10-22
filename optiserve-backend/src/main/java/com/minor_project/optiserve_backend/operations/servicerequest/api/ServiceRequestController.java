@@ -6,6 +6,7 @@ import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -24,18 +25,29 @@ public class ServiceRequestController {
     }
 
     @PostMapping
-    public ResponseEntity<ServiceRequestResponse> create(@Valid @RequestBody CreateServiceRequestRequest request) {
-        ServiceRequestResponse response = serviceRequestApplicationService.create(request);
+    public ResponseEntity<ServiceRequestResponse> create(
+            Authentication authentication, @Valid @RequestBody CreateServiceRequestRequest request) {
+        ServiceRequestResponse response = isAdmin(authentication)
+                ? serviceRequestApplicationService.create(request)
+                : serviceRequestApplicationService.createForCustomer(request, authentication.getName());
         return ResponseEntity.created(URI.create("/api/service-requests/" + response.id())).body(response);
     }
 
     @GetMapping("/{id}")
-    public ServiceRequestResponse findById(@PathVariable UUID id) {
-        return serviceRequestApplicationService.findById(id);
+    public ServiceRequestResponse findById(Authentication authentication, @PathVariable UUID id) {
+        return isAdmin(authentication)
+                ? serviceRequestApplicationService.findById(id)
+                : serviceRequestApplicationService.findByIdForCustomer(id, authentication.getName());
     }
 
     @GetMapping
-    public List<ServiceRequestResponse> findAll() {
-        return serviceRequestApplicationService.findAll();
+    public List<ServiceRequestResponse> findAll(Authentication authentication) {
+        return isAdmin(authentication)
+                ? serviceRequestApplicationService.findAll()
+                : serviceRequestApplicationService.findAllForCustomer(authentication.getName());
+    }
+
+    private static boolean isAdmin(Authentication authentication) {
+        return authentication.getAuthorities().stream().anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
     }
 }

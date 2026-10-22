@@ -117,6 +117,13 @@ public class Vehicle {
         return updatedAt;
     }
 
+    public void updateDetails(String registrationNumber, String make, String model, Integer year) {
+        this.registrationNumber = requireRegistrationNumber(registrationNumber);
+        this.make = requireText(make, "make", 100);
+        this.model = requireText(model, "model", 100);
+        this.year = requirePositiveYear(year);
+    }
+
     @PrePersist
     void initializeTimestamps() {
         if (createdAt == null) {

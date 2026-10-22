@@ -53,9 +53,13 @@ public class AuthUser implements UserDetails {
     }
 
     private AuthUser(String email, String passwordHash) {
+        this(email, passwordHash, "USER");
+    }
+
+    private AuthUser(String email, String passwordHash, String role) {
         this.email = email.toLowerCase(Locale.ROOT);
         this.passwordHash = passwordHash;
-        this.role = "USER";
+        this.role = role;
         this.enabled = true;
         this.createdAt = Instant.now();
         this.updatedAt = createdAt;
@@ -63,6 +67,10 @@ public class AuthUser implements UserDetails {
 
     public static AuthUser create(String email, String passwordHash) {
         return new AuthUser(email, passwordHash);
+    }
+
+    public static AuthUser provisionAdmin(String email, String passwordHash) {
+        return new AuthUser(email, passwordHash, "ADMIN");
     }
 
     public UUID getId() {

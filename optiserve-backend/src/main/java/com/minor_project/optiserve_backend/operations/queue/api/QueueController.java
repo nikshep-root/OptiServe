@@ -2,10 +2,12 @@ package com.minor_project.optiserve_backend.operations.queue.api;
 
 import com.minor_project.optiserve_backend.operations.queue.application.QueueApplicationService;
 import com.minor_project.optiserve_backend.operations.waittime.application.WaitTimeApplicationService;
+import com.minor_project.optiserve_backend.common.api.ResourceNotFoundException;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.Authentication;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -28,23 +30,37 @@ public class QueueController {
     }
 
     @PostMapping("/stages/{stageId}")
-    public ResponseEntity<QueueEntryResponse> queueStage(@PathVariable UUID stageId) {
+    public ResponseEntity<QueueEntryResponse> queueStage(@PathVariable UUID stageId, Authentication authentication) {
+        requireOwnedStageOrAdmin(stageId, authentication);
         QueueEntryResponse response = queueApplicationService.queueStage(stageId);
         return ResponseEntity.created(URI.create("/api/queue/stages/" + stageId)).body(response);
     }
 
     @GetMapping
-    public List<QueueEntryResponse> findQueuedStages() {
-        return queueApplicationService.findQueuedStages();
+    public List<QueueEntryResponse> findQueuedStages(Authentication authentication) {
+        return isAdmin(authentication) ? queueApplicationService.findQueuedStages()
+                : queueApplicationService.findQueuedStagesForCustomer(authentication.getName());
     }
 
     @GetMapping("/stages/{stageId}/wait-time")
-    public WaitTimeResponse estimateWaitTime(@PathVariable UUID stageId) {
+    public WaitTimeResponse estimateWaitTime(@PathVariable UUID stageId, Authentication authentication) {
+        requireOwnedStageOrAdmin(stageId, authentication);
         return waitTimeApplicationService.estimateWaitTime(stageId);
     }
 
     @DeleteMapping("/stages/{stageId}")
-    public QueueEntryResponse removeStageFromQueue(@PathVariable UUID stageId) {
+    public QueueEntryResponse removeStageFromQueue(@PathVariable UUID stageId, Authentication authentication) {
+        requireOwnedStageOrAdmin(stageId, authentication);
         return queueApplicationService.removeStageFromQueue(stageId);
+    }
+
+    private void requireOwnedStageOrAdmin(UUID stageId, Authentication authentication) {
+        if (!isAdmin(authentication) && !queueApplicationService.isStageOwnedByCustomer(stageId, authentication.getName())) {
+            throw new ResourceNotFoundException("Service stage was not found.");
+        }
+    }
+
+    private static boolean isAdmin(Authentication authentication) {
+        return authentication.getAuthorities().stream().anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
     }
 }

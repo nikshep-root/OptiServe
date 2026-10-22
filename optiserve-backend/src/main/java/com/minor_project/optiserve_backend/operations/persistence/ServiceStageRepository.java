@@ -20,4 +20,6 @@ public interface ServiceStageRepository extends JpaRepository<ServiceStage, UUID
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select stage from ServiceStage stage where stage.id = :id")
     Optional<ServiceStage> findByIdForUpdate(@Param("id") UUID id);
+
+    boolean existsByIdAndWorkflow_ServiceRequest_Vehicle_Customer_User_EmailIgnoreCase(UUID id, String email);
 }

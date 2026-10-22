@@ -37,7 +37,7 @@ class ServiceTypeControllerIntegrationTests {
     @Test
     void createsAServiceType() throws Exception {
         mockMvc.perform(post("/api/service-types")
-                        .with(user("operator"))
+                        .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new CreateServiceTypeRequest("Registration", "Front desk", 900L, true))))
@@ -52,11 +52,11 @@ class ServiceTypeControllerIntegrationTests {
         ServiceType persisted = serviceTypeRepository.saveAndFlush(
                 ServiceType.create("Consultation", null, Duration.ofMinutes(20)));
 
-        mockMvc.perform(get("/api/service-types").with(user("operator")))
+        mockMvc.perform(get("/api/service-types").with(user("operator").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].name").value("Consultation"));
 
-        mockMvc.perform(get("/api/service-types/{id}", persisted.getId()).with(user("operator")))
+        mockMvc.perform(get("/api/service-types/{id}", persisted.getId()).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(persisted.getId().toString()))
                 .andExpect(jsonPath("$.name").value("Consultation"));
@@ -68,7 +68,7 @@ class ServiceTypeControllerIntegrationTests {
                 ServiceType.create("Consultation", "Initial", Duration.ofMinutes(20)));
 
         mockMvc.perform(patch("/api/service-types/{id}", persisted.getId())
-                        .with(user("operator"))
+                        .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Extended consultation\",\"defaultServiceDurationSeconds\":1800,\"active\":false}"))
                 .andExpect(status().isOk())
@@ -80,7 +80,7 @@ class ServiceTypeControllerIntegrationTests {
     @Test
     void returnsStandardValidationAndNotFoundErrors() throws Exception {
         mockMvc.perform(post("/api/service-types")
-                        .with(user("operator"))
+                        .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"\",\"defaultServiceDurationSeconds\":0,\"active\":true}"))
                 .andExpect(status().isBadRequest())
@@ -89,14 +89,14 @@ class ServiceTypeControllerIntegrationTests {
                 .andExpect(jsonPath("$.fieldErrors.defaultServiceDurationSeconds").exists());
 
         mockMvc.perform(post("/api/service-types")
-                        .with(user("operator"))
+                        .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Registration\",\"defaultServiceDurationSeconds\":\"invalid\",\"active\":true}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("Request body is invalid."));
 
         mockMvc.perform(get("/api/service-types/{id}", "00000000-0000-0000-0000-000000000000")
-                        .with(user("operator")))
+                        .with(user("operator").roles("ADMIN")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Service type was not found."));
     }
@@ -106,7 +106,7 @@ class ServiceTypeControllerIntegrationTests {
         serviceTypeRepository.saveAndFlush(ServiceType.create("Registration", null, Duration.ofMinutes(15)));
 
         mockMvc.perform(post("/api/service-types")
-                        .with(user("operator"))
+                        .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(
                                 new CreateServiceTypeRequest("registration", null, 900L, true))))
@@ -119,7 +119,25 @@ class ServiceTypeControllerIntegrationTests {
         ServiceType persisted = serviceTypeRepository.saveAndFlush(
                 ServiceType.create("Temporary", null, Duration.ofMinutes(15)));
 
-        mockMvc.perform(delete("/api/service-types/{id}", persisted.getId()).with(user("operator")))
+        mockMvc.perform(delete("/api/service-types/{id}", persisted.getId()).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void customersCanReadButCannotMutateServiceTypes() throws Exception {
+        mockMvc.perform(get("/api/service-types").with(user("customer")))
+                .andExpect(status().isOk());
+        ServiceType persisted = serviceTypeRepository.saveAndFlush(
+                ServiceType.create("Customer protected type", null, Duration.ofMinutes(10)));
+        mockMvc.perform(post("/api/service-types").with(user("customer"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(
+                                new CreateServiceTypeRequest("Forbidden", null, 600L, true))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/api/service-types/{id}", persisted.getId()).with(user("customer"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"active\":false}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/service-types/{id}", persisted.getId()).with(user("customer")))
+                .andExpect(status().isForbidden());
     }
 }

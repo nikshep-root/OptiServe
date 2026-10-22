@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -58,7 +59,7 @@ class ServiceRequestControllerIntegrationTests {
         ServiceType repair = serviceTypeRepository.saveAndFlush(serviceType("Repair"));
 
         mockMvc.perform(post("/api/service-requests")
-                        .with(user("operator"))
+                        .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateServiceRequestRequest(
                                 vehicle.getId(), PriorityClass.URGENT, null,
@@ -89,12 +90,12 @@ class ServiceRequestControllerIntegrationTests {
         ServiceRequestResponse created = serviceRequestApplicationService.create(new CreateServiceRequestRequest(
                 vehicle.getId(), PriorityClass.NORMAL, null, List.of(inspection.getId())));
 
-        mockMvc.perform(get("/api/service-requests/{id}", created.id()).with(user("operator")))
+        mockMvc.perform(get("/api/service-requests/{id}", created.id()).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(created.id().toString()))
                 .andExpect(jsonPath("$.stages[0].serviceTypeName").value("Inspection"));
 
-        mockMvc.perform(get("/api/service-requests").with(user("operator")))
+        mockMvc.perform(get("/api/service-requests").with(user("operator").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].id").value(created.id().toString()));
     }
@@ -106,7 +107,7 @@ class ServiceRequestControllerIntegrationTests {
         long workflowsBefore = serviceWorkflowRepository.count();
 
         mockMvc.perform(post("/api/service-requests")
-                        .with(user("operator"))
+                        .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateServiceRequestRequest(
                                 UUID.randomUUID(), PriorityClass.NORMAL, null, List.of(inspection.getId())))))
@@ -115,7 +116,7 @@ class ServiceRequestControllerIntegrationTests {
 
         Vehicle vehicle = vehicleRepository.saveAndFlush(vehicle());
         mockMvc.perform(post("/api/service-requests")
-                        .with(user("operator"))
+                        .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateServiceRequestRequest(
                                 vehicle.getId(), PriorityClass.NORMAL, null, List.of(UUID.randomUUID())))))
@@ -123,7 +124,7 @@ class ServiceRequestControllerIntegrationTests {
                 .andExpect(jsonPath("$.message").value("Service type was not found."));
 
         mockMvc.perform(post("/api/service-requests")
-                        .with(user("operator"))
+                        .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"vehicleId\":\"" + vehicle.getId()
                                 + "\",\"priority\":\"NORMAL\",\"serviceTypeIds\":[]}"))
@@ -131,7 +132,7 @@ class ServiceRequestControllerIntegrationTests {
                 .andExpect(jsonPath("$.fieldErrors.serviceTypeIds").exists());
 
         mockMvc.perform(post("/api/service-requests")
-                        .with(user("operator"))
+                        .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateServiceRequestRequest(
                                 vehicle.getId(), PriorityClass.APPOINTMENT, null, List.of(inspection.getId())))))
@@ -143,9 +144,50 @@ class ServiceRequestControllerIntegrationTests {
 
     @Test
     void rejectsUnknownRequestId() throws Exception {
-        mockMvc.perform(get("/api/service-requests/{id}", UUID.randomUUID()).with(user("operator")))
+        mockMvc.perform(get("/api/service-requests/{id}", UUID.randomUUID()).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Service request was not found."));
+    }
+
+    @Test
+    void registeredCustomerCanCreateOwnedVehicleAndRequestButCannotReadAnotherCustomersRequest() throws Exception {
+        String email = "flow-" + UUID.randomUUID() + "@example.com";
+        String token = register(email);
+        mockMvc.perform(put("/api/customers/me").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Flow Customer\",\"phone\":null}"))
+                .andExpect(status().isOk());
+        ServiceType inspection = serviceTypeRepository.saveAndFlush(serviceType("Flow Inspection"));
+        var vehicleResult = mockMvc.perform(post("/api/vehicles").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"registrationNumber\":\"flow-" + UUID.randomUUID().toString().substring(0, 8)
+                                + "\",\"make\":\"Toyota\",\"model\":\"Camry\",\"year\":2024}"))
+                .andExpect(status().isCreated()).andReturn();
+        String vehicleId = objectMapper.readTree(vehicleResult.getResponse().getContentAsString()).get("id").asString();
+        String requestBody = "{\"vehicleId\":\"" + vehicleId
+                + "\",\"priority\":\"NORMAL\",\"serviceTypeIds\":[\"" + inspection.getId() + "\"]}";
+        var requestResult = mockMvc.perform(post("/api/service-requests").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content(requestBody))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.vehicleId").value(vehicleId)).andReturn();
+        String requestId = objectMapper.readTree(requestResult.getResponse().getContentAsString()).get("id").asString();
+
+        mockMvc.perform(get("/api/service-requests").header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].id").value(requestId))
+                .andExpect(jsonPath("$[1]").doesNotExist());
+
+        String otherToken = register("other-" + UUID.randomUUID() + "@example.com");
+        mockMvc.perform(get("/api/service-requests/{id}", requestId).header("Authorization", "Bearer " + otherToken))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/service-requests").header("Authorization", "Bearer " + otherToken)
+                        .contentType(MediaType.APPLICATION_JSON).content(requestBody))
+                .andExpect(status().isNotFound());
+    }
+
+    private String register(String email) throws Exception {
+        var result = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\",\"password\":\"correct-horse-battery\"}"))
+                .andExpect(status().isCreated()).andExpect(jsonPath("$.tokenType").value("Bearer")).andReturn();
+        return objectMapper.readTree(result.getResponse().getContentAsString()).get("accessToken").asString();
     }
 
     private Vehicle vehicle() {

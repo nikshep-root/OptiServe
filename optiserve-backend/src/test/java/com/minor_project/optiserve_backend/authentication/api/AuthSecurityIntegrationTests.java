@@ -2,6 +2,7 @@ package com.minor_project.optiserve_backend.authentication.api;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -83,6 +84,41 @@ class AuthSecurityIntegrationTests {
         mockMvc.perform(get("/api/resources")
                         .header("Authorization", "Bearer " + tokenFrom(login)))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void publicRegistrationCannotAssignAdminRole() throws Exception {
+        String email = "public-role-" + UUID.randomUUID() + "@example.com";
+        MvcResult response = mockMvc.perform(post("/api/auth/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"email\":\"" + email + "\",\"password\":\"" + PASSWORD
+                                + "\",\"role\":\"ADMIN\"}"))
+                .andReturn();
+
+        if (response.getResponse().getStatus() == 201) {
+            org.assertj.core.api.Assertions.assertThat(users.findByEmail(email).orElseThrow().getRole())
+                    .isEqualTo("USER");
+        } else {
+            org.assertj.core.api.Assertions.assertThat(response.getResponse().getStatus()).isEqualTo(400);
+            org.assertj.core.api.Assertions.assertThat(users.findByEmail(email)).isEmpty();
+        }
+    }
+
+    @Test
+    void authenticatedSessionReportsTheCurrentRole() throws Exception {
+        mockMvc.perform(get("/api/auth/me").header("Authorization", "Bearer " + protectedToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.email").value(protectedEmail))
+                .andExpect(jsonPath("$.role").value("USER"));
+
+        mockMvc.perform(get("/api/auth/me").with(user("admin@example.com").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.role").value("ADMIN"));
+    }
+
+    @Test
+    void sessionEndpointRequiresAuthentication() throws Exception {
+        mockMvc.perform(get("/api/auth/me")).andExpect(status().isUnauthorized());
     }
 
     @Test

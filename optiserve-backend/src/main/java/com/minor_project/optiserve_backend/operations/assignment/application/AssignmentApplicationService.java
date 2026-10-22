@@ -2,6 +2,7 @@ package com.minor_project.optiserve_backend.operations.assignment.application;
 
 import com.minor_project.optiserve_backend.operations.assignment.api.AssignmentNextResponse;
 import com.minor_project.optiserve_backend.operations.assignment.api.AssignmentNextResult;
+import com.minor_project.optiserve_backend.operations.assignment.api.AssignmentSummaryResponse;
 import com.minor_project.optiserve_backend.operations.domain.Assignment;
 import com.minor_project.optiserve_backend.operations.domain.QueueEntry;
 import com.minor_project.optiserve_backend.operations.domain.QueueEntryStatus;
@@ -80,6 +81,22 @@ public class AssignmentApplicationService {
         return assigned(persistedAssignment);
     }
 
+    @Transactional(readOnly = true)
+    public List<AssignmentSummaryResponse> findAllAssignments() {
+        return assignmentRepository.findAllByOrderByAssignedAtDesc().stream()
+                .map(AssignmentApplicationService::assignmentSummary)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<AssignmentSummaryResponse> findAssignmentsForCustomer(String email) {
+        return assignmentRepository
+                .findByServiceRequest_Vehicle_Customer_User_EmailIgnoreCaseOrderByAssignedAtDesc(email)
+                .stream()
+                .map(AssignmentApplicationService::assignmentSummary)
+                .toList();
+    }
+
     @Transactional
     public com.minor_project.optiserve_backend.operations.assignment.api.AssignmentExecutionResponse start(UUID assignmentId) {
         Assignment assignment = findAssignmentForUpdate(assignmentId);
@@ -126,5 +143,21 @@ public class AssignmentApplicationService {
                 assignment.getResource().getId(),
                 assignment.getResource().getName(),
                 assignment.getStatus());
+    }
+
+    private static AssignmentSummaryResponse assignmentSummary(Assignment assignment) {
+        ServiceStage stage = assignment.getServiceStage();
+        return new AssignmentSummaryResponse(
+                assignment.getId(),
+                assignment.getServiceRequest().getId(),
+                stage.getId(),
+                assignment.getServiceRequest().getVehicle().getRegistrationNumber(),
+                stage.getServiceType().getName(),
+                assignment.getServiceRequest().getPriorityClass(),
+                assignment.getResource().getName(),
+                assignment.getStatus(),
+                assignment.getAssignedAt(),
+                assignment.getStartedAt(),
+                assignment.getCompletedAt());
     }
 }

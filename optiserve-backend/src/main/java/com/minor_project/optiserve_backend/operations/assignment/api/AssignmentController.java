@@ -1,10 +1,13 @@
 package com.minor_project.optiserve_backend.operations.assignment.api;
 
 import com.minor_project.optiserve_backend.operations.assignment.application.AssignmentApplicationService;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestBody;
 import jakarta.validation.Valid;
+import java.util.List;
+import org.springframework.security.core.Authentication;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -16,6 +19,15 @@ public class AssignmentController {
 
     public AssignmentController(AssignmentApplicationService assignmentApplicationService) {
         this.assignmentApplicationService = assignmentApplicationService;
+    }
+
+    @GetMapping
+    public List<AssignmentSummaryResponse> findAssignments(Authentication authentication) {
+        boolean admin = authentication.getAuthorities().stream()
+                .anyMatch(authority -> authority.getAuthority().equals("ROLE_ADMIN"));
+        return admin
+                ? assignmentApplicationService.findAllAssignments()
+                : assignmentApplicationService.findAssignmentsForCustomer(authentication.getName());
     }
 
     @PostMapping("/next")

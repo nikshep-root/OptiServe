@@ -42,7 +42,17 @@ public class ServiceRequestApplicationService {
 
     @Transactional
     public ServiceRequestResponse create(CreateServiceRequestRequest request) {
-        Vehicle vehicle = findVehicle(request.vehicleId());
+        return create(request, findVehicle(request.vehicleId()));
+    }
+
+    @Transactional
+    public ServiceRequestResponse createForCustomer(CreateServiceRequestRequest request, String email) {
+        Vehicle vehicle = vehicleRepository.findByIdAndCustomer_User_EmailIgnoreCase(request.vehicleId(), email)
+                .orElseThrow(() -> new ResourceNotFoundException("Vehicle was not found."));
+        return create(request, vehicle);
+    }
+
+    private ServiceRequestResponse create(CreateServiceRequestRequest request, Vehicle vehicle) {
         List<ServiceType> stageServiceTypes = findActiveServiceTypes(request.serviceTypeIds());
 
         ServiceRequest serviceRequest = ServiceRequest.create(
@@ -67,8 +77,24 @@ public class ServiceRequestApplicationService {
     }
 
     @Transactional(readOnly = true)
+    public ServiceRequestResponse findByIdForCustomer(UUID id, String email) {
+        ServiceRequest serviceRequest = serviceRequestRepository
+                .findByIdAndVehicle_Customer_User_EmailIgnoreCase(id, email)
+                .orElseThrow(() -> new ResourceNotFoundException("Service request was not found."));
+        return toResponse(serviceRequest, findWorkflow(id));
+    }
+
+    @Transactional(readOnly = true)
     public List<ServiceRequestResponse> findAll() {
         return serviceRequestRepository.findAll(Sort.by(Sort.Direction.DESC, "requestedAt"))
+                .stream()
+                .map(serviceRequest -> toResponse(serviceRequest, findWorkflow(serviceRequest.getId())))
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<ServiceRequestResponse> findAllForCustomer(String email) {
+        return serviceRequestRepository.findAllByVehicle_Customer_User_EmailIgnoreCaseOrderByRequestedAtDesc(email)
                 .stream()
                 .map(serviceRequest -> toResponse(serviceRequest, findWorkflow(serviceRequest.getId())))
                 .toList();
