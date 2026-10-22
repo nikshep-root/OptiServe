@@ -92,6 +92,14 @@ public class Customer {
         return updatedAt;
     }
 
+    public void updateProfile(String name, String phone) {
+        this.name = requireText(name);
+        this.phone = phone == null || phone.isBlank() ? null : phone.trim();
+        if (this.phone != null && this.phone.length() > 32) {
+            throw new IllegalArgumentException("phone must not exceed 32 characters");
+        }
+    }
+
     @PrePersist
     void initializeTimestamps() {
         if (createdAt == null) {

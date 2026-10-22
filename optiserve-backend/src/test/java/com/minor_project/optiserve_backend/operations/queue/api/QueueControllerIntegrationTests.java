@@ -18,6 +18,7 @@ import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
 import com.minor_project.optiserve_backend.authentication.persistence.AuthUserRepository;
 import com.minor_project.optiserve_backend.customer.CustomerTestFixtures;
+import com.minor_project.optiserve_backend.customer.domain.Customer;
 import com.minor_project.optiserve_backend.customer.persistence.CustomerRepository;
 import com.minor_project.optiserve_backend.operations.persistence.QueueEntryRepository;
 import com.minor_project.optiserve_backend.operations.persistence.AssignmentRepository;
@@ -62,18 +63,18 @@ class QueueControllerIntegrationTests {
         UUID eligibleStageId = request.stages().getFirst().id();
         UUID pendingStageId = request.stages().get(1).id();
 
-        mockMvc.perform(post("/api/queue/stages/{stageId}", eligibleStageId).with(user("operator")))
+        mockMvc.perform(post("/api/queue/stages/{stageId}", eligibleStageId).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.stageId").value(eligibleStageId.toString()))
                 .andExpect(jsonPath("$.priority").value("URGENT"))
                 .andExpect(jsonPath("$.status").value("WAITING"))
                 .andExpect(jsonPath("$.stageStatus").value("QUEUED"));
 
-        mockMvc.perform(get("/api/queue").with(user("operator")))
+        mockMvc.perform(get("/api/queue").with(user("operator").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].stageId").value(eligibleStageId.toString()));
 
-        mockMvc.perform(post("/api/queue/stages/{stageId}", pendingStageId).with(user("operator")))
+        mockMvc.perform(post("/api/queue/stages/{stageId}", pendingStageId).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isConflict());
 
         ServiceStage queuedStage = serviceStageRepository.findById(eligibleStageId).orElseThrow();
@@ -88,11 +89,11 @@ class QueueControllerIntegrationTests {
         UUID stageId = request.stages().getFirst().id();
         long entriesBefore = queueEntryRepository.count();
 
-        mockMvc.perform(post("/api/queue/stages/{stageId}", stageId).with(user("operator")))
+        mockMvc.perform(post("/api/queue/stages/{stageId}", stageId).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isCreated());
-        mockMvc.perform(post("/api/queue/stages/{stageId}", stageId).with(user("operator")))
+        mockMvc.perform(post("/api/queue/stages/{stageId}", stageId).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isConflict());
-        mockMvc.perform(post("/api/queue/stages/{stageId}", UUID.randomUUID()).with(user("operator")))
+        mockMvc.perform(post("/api/queue/stages/{stageId}", UUID.randomUUID()).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isNotFound());
 
         assertThat(queueEntryRepository.count()).isEqualTo(entriesBefore + 1);
@@ -102,14 +103,14 @@ class QueueControllerIntegrationTests {
     void removesWaitingEntryAndMakesStageEligibleAgain() throws Exception {
         ServiceRequestResponse request = createRequest(PriorityClass.NORMAL, 1);
         UUID stageId = request.stages().getFirst().id();
-        mockMvc.perform(post("/api/queue/stages/{stageId}", stageId).with(user("operator")))
+        mockMvc.perform(post("/api/queue/stages/{stageId}", stageId).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(delete("/api/queue/stages/{stageId}", stageId).with(user("operator")))
+        mockMvc.perform(delete("/api/queue/stages/{stageId}", stageId).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("REMOVED"))
                 .andExpect(jsonPath("$.stageStatus").value("ELIGIBLE"));
-        mockMvc.perform(get("/api/queue").with(user("operator")))
+        mockMvc.perform(get("/api/queue").with(user("operator").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$").isEmpty());
 
@@ -123,10 +124,10 @@ class QueueControllerIntegrationTests {
         UUID stageId = request.stages().getFirst().id();
         ServiceType serviceType = serviceTypeRepository.findById(request.stages().getFirst().serviceTypeId()).orElseThrow();
         resourceRepository.saveAndFlush(Resource.create("Available " + UUID.randomUUID(), Set.of(serviceType)));
-        mockMvc.perform(post("/api/queue/stages/{stageId}", stageId).with(user("operator")))
+        mockMvc.perform(post("/api/queue/stages/{stageId}", stageId).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isCreated());
 
-        mockMvc.perform(get("/api/queue/stages/{stageId}/wait-time", stageId).with(user("operator")))
+        mockMvc.perform(get("/api/queue/stages/{stageId}/wait-time", stageId).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.stageId").value(stageId.toString()))
                 .andExpect(jsonPath("$.estimatedWaitMinutes").value(0))
@@ -143,9 +144,9 @@ class QueueControllerIntegrationTests {
         ServiceRequestResponse activeRequest = createRequest(PriorityClass.NORMAL, 1, serviceType);
         UUID targetStageId = targetRequest.stages().getFirst().id();
         UUID activeStageId = activeRequest.stages().getFirst().id();
-        mockMvc.perform(post("/api/queue/stages/{stageId}", targetStageId).with(user("operator")))
+        mockMvc.perform(post("/api/queue/stages/{stageId}", targetStageId).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isCreated());
-        mockMvc.perform(post("/api/queue/stages/{stageId}", activeStageId).with(user("operator")))
+        mockMvc.perform(post("/api/queue/stages/{stageId}", activeStageId).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isCreated());
         Resource resource = resourceRepository.saveAndFlush(Resource.create("Busy " + UUID.randomUUID(), Set.of(serviceType)));
         ServiceStage activeStage = serviceStageRepository.findById(activeStageId).orElseThrow();
@@ -154,7 +155,7 @@ class QueueControllerIntegrationTests {
         assignment.start(startedAt);
         assignmentRepository.saveAndFlush(assignment);
 
-        mockMvc.perform(get("/api/queue/stages/{stageId}/wait-time", targetStageId).with(user("operator")))
+        mockMvc.perform(get("/api/queue/stages/{stageId}/wait-time", targetStageId).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.estimatedWaitMinutes").value(30));
 
@@ -165,7 +166,7 @@ class QueueControllerIntegrationTests {
 
     @Test
     void returnsNotFoundForAnUnknownStageWaitTimeRequest() throws Exception {
-        mockMvc.perform(get("/api/queue/stages/{stageId}/wait-time", UUID.randomUUID()).with(user("operator")))
+        mockMvc.perform(get("/api/queue/stages/{stageId}/wait-time", UUID.randomUUID()).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isNotFound());
     }
 
@@ -174,8 +175,42 @@ class QueueControllerIntegrationTests {
         ServiceRequestResponse request = createRequest(PriorityClass.NORMAL, 1);
         UUID stageId = request.stages().getFirst().id();
 
-        mockMvc.perform(get("/api/queue/stages/{stageId}/wait-time", stageId).with(user("operator")))
+        mockMvc.perform(get("/api/queue/stages/{stageId}/wait-time", stageId).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isConflict());
+    }
+
+    @Test
+    void customerQueueAndWaitViewsAreScopedToTheirOwnVehicles() throws Exception {
+        ServiceType type = serviceTypeRepository.saveAndFlush(
+                ServiceType.create("Owner check " + UUID.randomUUID(), null, Duration.ofMinutes(15)));
+        Customer owner = CustomerTestFixtures.createPersistedCustomer(users, customers);
+        Customer other = CustomerTestFixtures.createPersistedCustomer(users, customers);
+        ServiceRequestResponse ownRequest = requestFor(owner, type);
+        ServiceRequestResponse otherRequest = requestFor(other, type);
+        UUID ownStage = ownRequest.stages().getFirst().id();
+        UUID otherStage = otherRequest.stages().getFirst().id();
+
+        mockMvc.perform(post("/api/queue/stages/{stageId}", ownStage).with(user("operator").roles("ADMIN")))
+                .andExpect(status().isCreated());
+        mockMvc.perform(post("/api/queue/stages/{stageId}", otherStage).with(user("operator").roles("ADMIN")))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(get("/api/queue").with(user(owner.getUser().getUsername())))
+                .andExpect(status().isOk()).andExpect(jsonPath("$[0].stageId").value(ownStage.toString()))
+                .andExpect(jsonPath("$[1]").doesNotExist());
+        mockMvc.perform(get("/api/queue/stages/{stageId}/wait-time", otherStage)
+                        .with(user(owner.getUser().getUsername())))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/queue/stages/{stageId}", otherStage)
+                        .with(user(owner.getUser().getUsername())))
+                .andExpect(status().isNotFound());
+    }
+
+    private ServiceRequestResponse requestFor(Customer customer, ServiceType serviceType) {
+        Vehicle vehicle = vehicleRepository.saveAndFlush(Vehicle.create(customer,
+                "OWN-" + UUID.randomUUID().toString().substring(0, 8), "Toyota", "Camry", 2024));
+        return serviceRequestApplicationService.create(new CreateServiceRequestRequest(
+                vehicle.getId(), PriorityClass.NORMAL, null, List.of(serviceType.getId())));
     }
 
     private ServiceRequestResponse createRequest(PriorityClass priority, int stageCount) {

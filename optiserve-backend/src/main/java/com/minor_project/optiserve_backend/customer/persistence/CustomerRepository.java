@@ -8,4 +8,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface CustomerRepository extends JpaRepository<Customer, UUID> {
 
     Optional<Customer> findByUserId(UUID userId);
+
+    Optional<Customer> findByUser_EmailIgnoreCase(String email);
+
+    boolean existsByUser_EmailIgnoreCase(String email);
 }

@@ -50,6 +50,20 @@ public class QueueApplicationService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public List<QueueEntryResponse> findQueuedStagesForCustomer(String email) {
+        return queueEntryRepository.findByStatusAndServiceRequest_Vehicle_Customer_User_EmailIgnoreCaseOrderByQueuedAtAsc(
+                        QueueEntryStatus.WAITING, email).stream()
+                .map(QueueApplicationService::toResponse)
+                .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public boolean isStageOwnedByCustomer(UUID stageId, String email) {
+        return serviceStageRepository.existsByIdAndWorkflow_ServiceRequest_Vehicle_Customer_User_EmailIgnoreCase(
+                stageId, email);
+    }
+
     @Transactional
     public QueueEntryResponse removeStageFromQueue(UUID stageId) {
         ServiceStage stage = findStageForUpdate(stageId);

@@ -43,7 +43,7 @@ class ResourceControllerIntegrationTests {
     @Test
     void createsAndReturnsResources() throws Exception {
         mockMvc.perform(post("/api/resources")
-                        .with(user("operator"))
+                        .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(new CreateResourceRequest("Counter A"))))
                 .andExpect(status().isCreated())
@@ -51,7 +51,7 @@ class ResourceControllerIntegrationTests {
                 .andExpect(jsonPath("$.status").value("AVAILABLE"))
                 .andExpect(jsonPath("$.compatibleServiceTypes").isEmpty());
 
-        mockMvc.perform(get("/api/resources").with(user("operator")))
+        mockMvc.perform(get("/api/resources").with(user("operator").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].name").value("Counter A"));
     }
@@ -60,26 +60,26 @@ class ResourceControllerIntegrationTests {
     void getsAndUpdatesAResourceAndItsStatus() throws Exception {
         Resource resource = resourceRepository.saveAndFlush(Resource.create("Counter A", java.util.Set.of()));
 
-        mockMvc.perform(get("/api/resources/{id}", resource.getId()).with(user("operator")))
+        mockMvc.perform(get("/api/resources/{id}", resource.getId()).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Counter A"));
 
         mockMvc.perform(patch("/api/resources/{id}", resource.getId())
-                        .with(user("operator"))
+                        .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"Counter B\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Counter B"));
 
         mockMvc.perform(patch("/api/resources/{id}/status", resource.getId())
-                        .with(user("operator"))
+                        .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"OFFLINE\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("OFFLINE"));
 
         mockMvc.perform(patch("/api/resources/{id}/status", resource.getId())
-                        .with(user("operator"))
+                        .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"status\":\"BUSY\"}"))
                 .andExpect(status().isConflict())
@@ -95,42 +95,42 @@ class ResourceControllerIntegrationTests {
         serviceTypeRepository.saveAndFlush(serviceType);
 
         mockMvc.perform(put("/api/resources/{resourceId}/service-types/{serviceTypeId}", resource.getId(), serviceType.getId())
-                        .with(user("operator")))
+                        .with(user("operator").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.compatibleServiceTypes[0].id").value(serviceType.getId().toString()))
                 .andExpect(jsonPath("$.compatibleServiceTypes[0].active").value(false));
 
-        mockMvc.perform(get("/api/resources/{resourceId}/service-types", resource.getId()).with(user("operator")))
+        mockMvc.perform(get("/api/resources/{resourceId}/service-types", resource.getId()).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$[0].name").value("Registration"));
 
         mockMvc.perform(put("/api/resources/{resourceId}/service-types/{serviceTypeId}", resource.getId(), serviceType.getId())
-                        .with(user("operator")))
+                        .with(user("operator").roles("ADMIN")))
                 .andExpect(status().isConflict());
 
         mockMvc.perform(delete("/api/resources/{resourceId}/service-types/{serviceTypeId}", resource.getId(), serviceType.getId())
-                        .with(user("operator")))
+                        .with(user("operator").roles("ADMIN")))
                 .andExpect(status().isNoContent());
     }
 
     @Test
     void returnsValidationAndNotFoundErrors() throws Exception {
         mockMvc.perform(post("/api/resources")
-                        .with(user("operator"))
+                        .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"name\":\"\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.fieldErrors.name").exists());
 
         mockMvc.perform(get("/api/resources/{id}", "00000000-0000-0000-0000-000000000000")
-                        .with(user("operator")))
+                        .with(user("operator").roles("ADMIN")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Resource was not found."));
 
         Resource resource = resourceRepository.saveAndFlush(Resource.create("Counter A", java.util.Set.of()));
         mockMvc.perform(put("/api/resources/{resourceId}/service-types/{serviceTypeId}",
                         resource.getId(), "00000000-0000-0000-0000-000000000000")
-                        .with(user("operator")))
+                        .with(user("operator").roles("ADMIN")))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.message").value("Service type was not found."));
     }
@@ -139,7 +139,34 @@ class ResourceControllerIntegrationTests {
     void deletesAnUnreferencedResource() throws Exception {
         Resource resource = resourceRepository.saveAndFlush(Resource.create("Temporary", java.util.Set.of()));
 
-        mockMvc.perform(delete("/api/resources/{id}", resource.getId()).with(user("operator")))
+        mockMvc.perform(delete("/api/resources/{id}", resource.getId()).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isNoContent());
+    }
+
+    @Test
+    void customersCanReadButCannotManageResources() throws Exception {
+        mockMvc.perform(get("/api/resources").with(user("customer")))
+                .andExpect(status().isOk());
+        Resource resource = resourceRepository.saveAndFlush(Resource.create("Customer protected bay", java.util.Set.of()));
+        ServiceType serviceType = serviceTypeRepository.saveAndFlush(
+                ServiceType.create("Customer protected service", null, Duration.ofMinutes(15)));
+        mockMvc.perform(post("/api/resources").with(user("customer"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(objectMapper.writeValueAsString(new CreateResourceRequest("Forbidden Bay"))))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/api/resources/{id}", resource.getId()).with(user("customer"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"name\":\"Changed\"}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(patch("/api/resources/{id}/status", resource.getId()).with(user("customer"))
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"status\":\"OFFLINE\"}"))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(put("/api/resources/{resourceId}/service-types/{serviceTypeId}", resource.getId(), serviceType.getId())
+                        .with(user("customer")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/resources/{resourceId}/service-types/{serviceTypeId}", resource.getId(), serviceType.getId())
+                        .with(user("customer")))
+                .andExpect(status().isForbidden());
+        mockMvc.perform(delete("/api/resources/{id}", resource.getId()).with(user("customer")))
+                .andExpect(status().isForbidden());
     }
 }

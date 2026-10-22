@@ -12,4 +12,7 @@ public interface QueueEntryRepository extends JpaRepository<QueueEntry, UUID> {
     Optional<QueueEntry> findByServiceStageIdAndStatus(UUID serviceStageId, QueueEntryStatus status);
 
     List<QueueEntry> findByStatusOrderByQueuedAtAsc(QueueEntryStatus status);
+
+    List<QueueEntry> findByStatusAndServiceRequest_Vehicle_Customer_User_EmailIgnoreCaseOrderByQueuedAtAsc(
+            QueueEntryStatus status, String email);
 }

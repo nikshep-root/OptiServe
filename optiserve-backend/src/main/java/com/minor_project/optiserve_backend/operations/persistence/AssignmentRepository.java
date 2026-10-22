@@ -19,4 +19,8 @@ public interface AssignmentRepository extends JpaRepository<Assignment, UUID> {
     Optional<Assignment> findByIdForUpdate(@Param("id") UUID id);
 
     List<Assignment> findByStatus(com.minor_project.optiserve_backend.operations.domain.AssignmentStatus status);
+
+    List<Assignment> findAllByOrderByAssignedAtDesc();
+
+    List<Assignment> findByServiceRequest_Vehicle_Customer_User_EmailIgnoreCaseOrderByAssignedAtDesc(String email);
 }

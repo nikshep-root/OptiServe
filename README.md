@@ -1,5 +1,9 @@
 # OptiServe
 
+## Frontend
+
+The Spring Boot application serves the OPTISERVE landing page and workshop console at `/`. The frontend uses the existing authenticated APIs for service requests, queue state, wait estimates, resources, and assignment actions. See [docs/FRONTEND.md](docs/FRONTEND.md) for local usage and current API limitations.
+
 > **Intelligent Service Operations & Resource Orchestration Platform for Automotive Service Centers**
 
 OptiServe is a Spring Boot backend for managing automotive service-center operations where multiple vehicles, service requests, service stages, queues, and limited service resources compete for attention.
@@ -1106,6 +1110,8 @@ OPTISERVE_DB_USERNAME
 OPTISERVE_DB_PASSWORD
 OPTISERVE_JWT_SECRET
 ```
+
+For one-time local administrator provisioning, activate the `local` Spring profile and optionally set `OPTISERVE_ADMIN_BOOTSTRAP_ENABLED=true`, `OPTISERVE_ADMIN_EMAIL`, and `OPTISERVE_ADMIN_PASSWORD` in the backend process environment before starting the application. The password is encoded before persistence and is not logged. After the first successful startup, disable the bootstrap flag and remove the password variable. Public registration always creates customer accounts.
 
 Example:
 
