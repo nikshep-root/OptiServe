@@ -2002,15 +2002,74 @@ tbody tr[hidden] {
   margin-top:20px;
   gap:12px
 }
-.modal .auth-form select[multiple] {
-  height:auto;
-  min-height:70px;
-  padding:8px
-}
 .field-hint {
   margin-top:-2px;
   color:#7d8477;
   font-size:9px
+}
+.service-stage-group {
+  min-width:0;
+  margin:0;
+  padding:0;
+  border:0
+}
+.service-stage-group legend {
+  width:100%;
+  margin-bottom:8px;
+  color:#c7ccc1;
+  font-size:11px;
+  font-weight:600
+}
+.service-stage-group legend span {
+  float:right;
+  color:#7d8477;
+  font-size:9px;
+  font-weight:400
+}
+.service-stage-options {
+  display:grid;
+  gap:7px
+}
+.service-stage-option {
+  min-height:58px;
+  display:grid!important;
+  grid-template-columns:24px 30px minmax(0,1fr);
+  align-items:center;
+  gap:10px!important;
+  padding:9px 12px;
+  border:1px solid #343930;
+  background:#181b17;
+  cursor:pointer
+}
+.service-stage-option:has(input:checked) {
+  border-color:#8ba94d;
+  background:#1e2418
+}
+.service-stage-option input {
+  width:22px!important;
+  height:22px!important;
+  margin:0;
+  padding:0!important;
+  border:0!important;
+  background:transparent!important;
+  appearance:auto;
+  accent-color:var(--lime)
+}
+.service-stage-order {
+  color:#7d8477;
+  font:400 9px var(--mono)
+}
+.service-stage-name {
+  min-width:0;
+  color:#e5e9de;
+  overflow-wrap:anywhere
+}
+.service-stage-name small {
+  display:block;
+  margin-top:3px;
+  color:#858c7f;
+  font-size:9px;
+  font-weight:400
 }
 .modal .auth-form select option {
   padding:5px
@@ -2914,6 +2973,10 @@ to {
   .app-shell {grid-template-columns:1fr}.app-sidebar {transform:translateX(-100%);width:250px}.app-sidebar.sidebar-open {transform:translateX(0)}.app-main {grid-column:1}.app-topbar {padding-inline:20px}.topbar-menu {display:block}.dashboard-content {padding:30px 20px 45px}
 }
 @media(max-width:560px) {
+  .modal-backdrop {padding:12px;align-items:center}
+  .modal.request-modal {width:100%;max-height:calc(100dvh - 24px);padding:20px 16px;overflow:auto;overscroll-behavior:contain}
+  .request-modal .auth-form {gap:11px}
+  .service-stage-option {min-height:60px;padding:9px 10px}
   .story-shell .wrap {width:calc(100% - 36px)}.story-header {height:62px}.story-header .brand {font-size:14px}.story-header .brand-mark {width:26px;height:26px}
   .story-hero {min-height:660px}.story-hero-copy {padding-block:100px 130px}.story-hero h1 {font-size:clamp(56px,14vw,79px)}.story-hero-copy>p {max-width:330px;font-size:14px}
   .story-actions {align-items:flex-start;flex-direction:column;gap:18px;margin-top:26px}.story-hero-coordinates {display:none}.story-scroll-cue {font-size:7px}

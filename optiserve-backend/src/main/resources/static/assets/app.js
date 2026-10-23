@@ -413,6 +413,7 @@ function dashboardShell(active = "overview") {
 }
 
 let dashboardData = { customer: null, vehicles: [], requests: [], queue: [], resources: [], serviceTypes: [], assignments: [], waits: {}, errors: {} };
+let dashboardNavigationCleanup = null;
 
 async function loadDashboard() {
   dashboardData.errors = {};
@@ -556,8 +557,41 @@ function renderDashboard(page = "overview") {
 }
 
 function wireDashboardActions() {
+  dashboardNavigationCleanup?.();
+  dashboardNavigationCleanup = null;
   document.querySelector("#sign-out")?.addEventListener("click", () => { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(ROLE_KEY); location.hash = "#/login"; });
-  document.querySelector("#menu-toggle")?.addEventListener("click", () => document.querySelector("#sidebar")?.classList.toggle("sidebar-open"));
+  const menuButton = document.querySelector("#menu-toggle");
+  const sidebar = document.querySelector("#sidebar");
+  if (menuButton && sidebar) {
+    const mobileNavigation = window.matchMedia("(max-width: 820px)");
+    const setSidebarOpen = (open, returnFocus = false) => {
+      const shouldOpen = open && mobileNavigation.matches;
+      sidebar.classList.toggle("sidebar-open", shouldOpen);
+      menuButton.setAttribute("aria-expanded", String(shouldOpen));
+      if (!shouldOpen && returnFocus && mobileNavigation.matches) menuButton.focus();
+    };
+    const toggleSidebar = () => setSidebarOpen(!sidebar.classList.contains("sidebar-open"));
+    const closeOnOutsideTap = (event) => {
+      if (mobileNavigation.matches && sidebar.classList.contains("sidebar-open") && !sidebar.contains(event.target) && !menuButton.contains(event.target)) setSidebarOpen(false);
+    };
+    const closeOnEscape = (event) => {
+      if (event.key === "Escape" && sidebar.classList.contains("sidebar-open")) setSidebarOpen(false, true);
+    };
+    const closeOnNavigation = () => setSidebarOpen(false, true);
+    const handleBreakpointChange = () => setSidebarOpen(false);
+    menuButton.addEventListener("click", toggleSidebar);
+    document.addEventListener("pointerdown", closeOnOutsideTap);
+    window.addEventListener("keydown", closeOnEscape);
+    sidebar.querySelectorAll(".app-nav a").forEach((link) => link.addEventListener("click", closeOnNavigation));
+    mobileNavigation.addEventListener?.("change", handleBreakpointChange);
+    dashboardNavigationCleanup = () => {
+      menuButton.removeEventListener("click", toggleSidebar);
+      document.removeEventListener("pointerdown", closeOnOutsideTap);
+      window.removeEventListener("keydown", closeOnEscape);
+      sidebar.querySelectorAll(".app-nav a").forEach((link) => link.removeEventListener("click", closeOnNavigation));
+      mobileNavigation.removeEventListener?.("change", handleBreakpointChange);
+    };
+  }
   document.querySelectorAll('[data-action="refresh"], [data-action="retry"]').forEach((button) => button.addEventListener("click", loadDashboard));
   document.querySelector("#request-search")?.addEventListener("input", (event) => {
     filterRequests();
@@ -773,11 +807,15 @@ function showRequestForm() {
   modal.className = "modal-backdrop";
   const options = dashboardData.vehicles.map((vehicle) => `<option value="${vehicle.id}">${escapeHtml(vehicle.registrationNumber)} · ${escapeHtml(vehicle.make)} ${escapeHtml(vehicle.model)} (${vehicle.year})</option>`).join("");
   const serviceTypeHint = types.length
-    ? '<small class="field-hint">Use Ctrl or Command to select multiple services in order.</small>'
-    : `<p class="field-hint">${dashboardData.errors.serviceTypes ? "Service types are unavailable right now. Retry after the catalog reconnects." : "No active service types are configured yet. Ask a workshop administrator to add an active service type."}</p>`;
-  modal.innerHTML = `<section class="modal" role="dialog" aria-modal="true" aria-labelledby="request-modal-title"><button class="modal-close" type="button" aria-label="Close dialog">×</button><span class="panel-kicker">SERVICE / NEW REQUEST</span><h2 id="request-modal-title">Start a request</h2><p class="modal-intro">Register or choose one of your vehicles, then select the ordered service stages.</p><form id="request-form" class="auth-form"><label>Vehicle<select name="vehicleId" required>${options}<option value="new" ${options ? "" : "selected"}>Register a vehicle</option></select></label><div id="new-vehicle-fields" ${options ? "hidden" : ""}><label>Registration number<input name="registrationNumber" maxlength="32" required placeholder="KA01AB1234"></label><label>Make<input name="make" maxlength="100" required placeholder="Toyota"></label><label>Model<input name="model" maxlength="100" required placeholder="Camry"></label><label>Year<input type="number" name="year" min="1" required placeholder="2024"></label></div><label>Priority<select name="priority"><option value="NORMAL">Normal</option><option value="URGENT">Urgent</option><option value="CRITICAL">Critical</option><option value="APPOINTMENT">Appointment</option></select></label><label class="appointment-field" hidden>Appointment time<input type="datetime-local" name="appointmentTime"></label><label>Service stages<select name="serviceTypeIds" multiple required size="${Math.min(Math.max(types.length, 2), 5)}">${types.map((type) => `<option value="${type.id}">${escapeHtml(type.name)} · default ${duration(type.defaultServiceDurationSeconds)}</option>`).join("")}</select></label>${serviceTypeHint}<button class="button button-lime auth-submit" type="submit" ${types.length ? "" : "disabled"}>Create service request ${icon("arrow", 15)}</button><p class="form-error" id="request-error" role="alert"></p></form></section>`;
+    ? '<small class="field-hint" id="service-stage-hint">Choose one or more stages. Their displayed order will be used in your request.</small>'
+    : `<p class="field-hint" id="service-stage-hint">${dashboardData.errors.serviceTypes ? "Service types are unavailable right now. Retry after the catalog reconnects." : "No active service types are configured yet. Ask a workshop administrator to add an active service type."}</p>`;
+  const serviceStages = types.map((type, index) => `<label class="service-stage-option"><input type="checkbox" name="serviceTypeIds" value="${escapeHtml(type.id)}"><span class="service-stage-order">${String(index + 1).padStart(2, "0")}</span><span class="service-stage-name">${escapeHtml(type.name)}<small>Default ${duration(type.defaultServiceDurationSeconds)}</small></span></label>`).join("");
+  modal.innerHTML = `<section class="modal request-modal" role="dialog" aria-modal="true" aria-labelledby="request-modal-title"><button class="modal-close" type="button" aria-label="Close dialog">×</button><span class="panel-kicker">SERVICE / NEW REQUEST</span><h2 id="request-modal-title">Start a request</h2><p class="modal-intro">Register or choose one of your vehicles, then select the ordered service stages.</p><form id="request-form" class="auth-form"><label>Vehicle<select name="vehicleId" required>${options}<option value="new" ${options ? "" : "selected"}>Register a vehicle</option></select></label><div id="new-vehicle-fields" ${options ? "hidden" : ""}><label>Registration number<input name="registrationNumber" maxlength="32" required placeholder="KA01AB1234"></label><label>Make<input name="make" maxlength="100" required placeholder="Toyota"></label><label>Model<input name="model" maxlength="100" required placeholder="Camry"></label><label>Year<input type="number" name="year" min="1" required placeholder="2024"></label></div><label>Priority<select name="priority"><option value="NORMAL">Normal</option><option value="URGENT">Urgent</option><option value="CRITICAL">Critical</option><option value="APPOINTMENT">Appointment</option></select></label><label class="appointment-field" hidden>Appointment time<input type="datetime-local" name="appointmentTime"></label><fieldset class="service-stage-group" tabindex="-1" aria-describedby="service-stage-hint"><legend>Service stages <span>Request order</span></legend><div class="service-stage-options">${serviceStages}</div></fieldset>${serviceTypeHint}<button class="button button-lime auth-submit" type="submit" ${types.length ? "" : "disabled"}>Create service request ${icon("arrow", 15)}</button><p class="form-error" id="request-error" role="alert"></p></form></section>`;
   document.body.append(modal);
   modal.querySelector(".modal-close").focus();
+  modal.querySelectorAll('[name="serviceTypeIds"]').forEach((checkbox) => checkbox.addEventListener("change", () => {
+    if (modal.querySelector('[name="serviceTypeIds"]:checked')) modal.querySelector("#request-error").textContent = "";
+  }));
   modal.querySelector(".modal-close").addEventListener("click", () => modal.remove());
   modal.addEventListener("click", (event) => { if (event.target === modal) modal.remove(); });
   modal.addEventListener("keydown", (event) => { if (event.key === "Escape") modal.remove(); });
@@ -791,7 +829,14 @@ function showRequestForm() {
   modal.querySelector("#request-form").addEventListener("submit", async (event) => {
     event.preventDefault();
     const data = new FormData(event.currentTarget);
-    const serviceTypeIds = [...modal.querySelector('[name="serviceTypeIds"]').selectedOptions].map((option) => option.value);
+    const serviceTypeIds = [...modal.querySelectorAll('[name="serviceTypeIds"]:checked')].map((checkbox) => checkbox.value);
+    const errorMessage = modal.querySelector("#request-error");
+    if (!serviceTypeIds.length) {
+      errorMessage.textContent = "Select at least one service stage to continue.";
+      modal.querySelector(".service-stage-group")?.focus();
+      return;
+    }
+    errorMessage.textContent = "";
     const appointmentTime = data.get("appointmentTime");
     const body = { priority: data.get("priority"), serviceTypeIds, ...(appointmentTime ? { appointmentTime: new Date(appointmentTime).toISOString() } : {}) };
     const submit = event.currentTarget.querySelector("button[type=submit]");
@@ -898,6 +943,8 @@ async function dashboard(page = "overview") {
 }
 
 function renderRoute() {
+  dashboardNavigationCleanup?.();
+  dashboardNavigationCleanup = null;
   const anchor = location.hash.replace(/^#/, "");
   if (anchor.startsWith("story-") && document.getElementById(anchor)) return;
   landingMenuCleanup?.();
