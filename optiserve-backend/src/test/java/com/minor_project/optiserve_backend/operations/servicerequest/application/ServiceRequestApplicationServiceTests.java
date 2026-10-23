@@ -14,6 +14,8 @@ import com.minor_project.optiserve_backend.operations.domain.ServiceStageStatus;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.ServiceWorkflow;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
+import com.minor_project.optiserve_backend.operations.duration.application.DefaultServiceDurationPredictor;
+import com.minor_project.optiserve_backend.operations.duration.application.ServiceDurationPredictor;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceRequestRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceTypeRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceWorkflowRepository;
@@ -36,6 +38,7 @@ class ServiceRequestApplicationServiceTests {
     @Mock private ServiceWorkflowRepository serviceWorkflowRepository;
     @Mock private VehicleRepository vehicleRepository;
     @Mock private ServiceTypeRepository serviceTypeRepository;
+    @Mock private ServiceDurationPredictor serviceDurationPredictor;
 
     @Test
     void createsRequestWithActiveWorkflowAndOrderedStages() {
@@ -50,6 +53,8 @@ class ServiceRequestApplicationServiceTests {
         when(serviceTypeRepository.findById(repairId)).thenReturn(Optional.of(repair));
         when(serviceRequestRepository.save(any(ServiceRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(serviceWorkflowRepository.save(any(ServiceWorkflow.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(serviceDurationPredictor.predict(any()))
+                .thenReturn(Duration.ofMinutes(21), Duration.ofMinutes(42));
 
         service().create(new CreateServiceRequestRequest(
                 vehicleId, PriorityClass.URGENT, null, List.of(inspectionId, repairId)));
@@ -65,6 +70,28 @@ class ServiceRequestApplicationServiceTests {
                 .containsExactly(
                         org.assertj.core.groups.Tuple.tuple(1, ServiceStageStatus.ELIGIBLE, inspection),
                         org.assertj.core.groups.Tuple.tuple(2, ServiceStageStatus.PENDING, repair));
+        assertThat(workflowCaptor.getValue().getStages())
+                .extracting(stage -> stage.getPredictedServiceDuration())
+                .containsExactly(Duration.ofMinutes(21), Duration.ofMinutes(42));
+    }
+
+    @Test
+    void keepsRequestCreationWorkingAndUsesDefaultWhenPredictorThrows() {
+        UUID vehicleId = UUID.randomUUID();
+        UUID serviceTypeId = UUID.randomUUID();
+        ServiceType serviceType = serviceType("Inspection");
+        when(vehicleRepository.findById(vehicleId)).thenReturn(Optional.of(vehicle()));
+        when(serviceTypeRepository.findById(serviceTypeId)).thenReturn(Optional.of(serviceType));
+        when(serviceRequestRepository.save(any(ServiceRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(serviceWorkflowRepository.save(any(ServiceWorkflow.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(serviceDurationPredictor.predict(any())).thenThrow(new IllegalStateException("client failure"));
+
+        service().create(new CreateServiceRequestRequest(vehicleId, PriorityClass.NORMAL, null, List.of(serviceTypeId)));
+
+        ArgumentCaptor<ServiceWorkflow> workflowCaptor = ArgumentCaptor.forClass(ServiceWorkflow.class);
+        verify(serviceWorkflowRepository).save(workflowCaptor.capture());
+        assertThat(workflowCaptor.getValue().getStages().getFirst().getPredictedServiceDuration())
+                .isEqualTo(serviceType.getDefaultServiceDuration());
     }
 
     @Test
@@ -94,7 +121,9 @@ class ServiceRequestApplicationServiceTests {
                 serviceRequestRepository,
                 serviceWorkflowRepository,
                 vehicleRepository,
-                serviceTypeRepository);
+                serviceTypeRepository,
+                serviceDurationPredictor,
+                new DefaultServiceDurationPredictor());
     }
 
     private Vehicle vehicle() {
