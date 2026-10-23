@@ -179,11 +179,13 @@ ml-service/
 ```
 
 
-## 8. Explicitly out of scope for this phase
+## 8. Service boundary and Spring Boot integration
 
 - No database access of any kind.
 - No queue/resource/assignment mutation.
 - No authentication.
 - No notifications/WhatsApp.
-- No changes to the Spring Boot backend (integration is a separate,
-  future issue — this service is self-contained and independently runnable).
+- This service remains independently runnable and does not access the backend database.
+- Spring Boot calls `POST /predict-duration` using `OPTISERVE_ML_BASE_URL`.
+- The response is advisory service-duration input. Spring Boot validates it and uses the configured service-type duration when the call fails, the model is unavailable, or inputs/predictions are unsupported.
+- Queue priority, resource compatibility, assignment, and waiting-time estimates remain backend responsibilities.

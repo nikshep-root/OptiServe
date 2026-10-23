@@ -7,6 +7,8 @@ import com.minor_project.optiserve_backend.operations.domain.ServiceStage;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.ServiceWorkflow;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
+import com.minor_project.optiserve_backend.operations.duration.application.DefaultServiceDurationPredictor;
+import com.minor_project.optiserve_backend.operations.duration.application.ServiceDurationPredictor;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceRequestRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceTypeRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceWorkflowRepository;
@@ -14,9 +16,12 @@ import com.minor_project.optiserve_backend.operations.persistence.VehicleReposit
 import com.minor_project.optiserve_backend.operations.servicerequest.api.CreateServiceRequestRequest;
 import com.minor_project.optiserve_backend.operations.servicerequest.api.ServiceRequestResponse;
 import com.minor_project.optiserve_backend.operations.servicerequest.api.ServiceRequestStageResponse;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -24,20 +29,28 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class ServiceRequestApplicationService {
 
+    private static final Logger LOGGER = LoggerFactory.getLogger(ServiceRequestApplicationService.class);
+
     private final ServiceRequestRepository serviceRequestRepository;
     private final ServiceWorkflowRepository serviceWorkflowRepository;
     private final VehicleRepository vehicleRepository;
     private final ServiceTypeRepository serviceTypeRepository;
+    private final ServiceDurationPredictor serviceDurationPredictor;
+    private final DefaultServiceDurationPredictor defaultServiceDurationPredictor;
 
     public ServiceRequestApplicationService(
             ServiceRequestRepository serviceRequestRepository,
             ServiceWorkflowRepository serviceWorkflowRepository,
             VehicleRepository vehicleRepository,
-            ServiceTypeRepository serviceTypeRepository) {
+            ServiceTypeRepository serviceTypeRepository,
+            ServiceDurationPredictor serviceDurationPredictor,
+            DefaultServiceDurationPredictor defaultServiceDurationPredictor) {
         this.serviceRequestRepository = serviceRequestRepository;
         this.serviceWorkflowRepository = serviceWorkflowRepository;
         this.vehicleRepository = vehicleRepository;
         this.serviceTypeRepository = serviceTypeRepository;
+        this.serviceDurationPredictor = serviceDurationPredictor;
+        this.defaultServiceDurationPredictor = defaultServiceDurationPredictor;
     }
 
     @Transactional
@@ -60,13 +73,30 @@ public class ServiceRequestApplicationService {
                 stageServiceTypes.getFirst(),
                 request.priority(),
                 request.appointmentTime());
-        ServiceRequest persistedRequest = serviceRequestRepository.save(serviceRequest);
+        ServiceWorkflow workflow = ServiceWorkflow.create(serviceRequest);
+        stageServiceTypes.forEach(serviceType -> {
+            ServiceStage stage = workflow.addStage(serviceType, null);
+            stage.updatePredictedServiceDuration(predictSafely(stage));
+        });
 
-        ServiceWorkflow workflow = ServiceWorkflow.create(persistedRequest);
-        stageServiceTypes.forEach(serviceType -> workflow.addStage(serviceType, null));
+        ServiceRequest persistedRequest = serviceRequestRepository.save(serviceRequest);
         ServiceWorkflow persistedWorkflow = serviceWorkflowRepository.save(workflow);
 
         return toResponse(persistedRequest, persistedWorkflow);
+    }
+
+    private Duration predictSafely(ServiceStage stage) {
+        try {
+            Duration prediction = serviceDurationPredictor.predict(stage);
+            if (prediction != null && !prediction.isNegative() && !prediction.isZero()) {
+                return prediction;
+            }
+            LOGGER.warn("Service duration predictor returned an invalid value; using the configured default");
+        } catch (RuntimeException exception) {
+            LOGGER.warn("Service duration predictor failed; using the configured default ({})",
+                    exception.getClass().getSimpleName());
+        }
+        return defaultServiceDurationPredictor.predict(stage);
     }
 
     @Transactional(readOnly = true)

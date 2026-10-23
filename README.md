@@ -20,7 +20,7 @@ OptiServe combines:
 - Transaction-safe resource assignment
 - Service execution lifecycle
 - Dynamic waiting-time estimation
-- A pluggable service-duration prediction abstraction, ready for a future ML service
+- A resilient ML-backed service-duration prediction with deterministic default fallback
 
 ---
 
@@ -188,14 +188,16 @@ Application / Scheduling Logic
           v
 ServiceDurationPredictor
           |
-          +--> DefaultServiceDurationPredictor
+          +--> MlServiceDurationPredictor (primary)
           |        |
-          |        +--> ServiceType default duration
+          |        +--> FastAPI /predict-duration
           |
-          +--> Future ML-backed implementation
+          +--> DefaultServiceDurationPredictor (fallback)
+                   |
+                   +--> ServiceType default duration
 ```
 
-The actual external FastAPI ML service is **not yet part of the merged backend implementation**. The current predictor is deterministic and uses the configured `ServiceType` duration.
+The backend calls the separately runnable FastAPI service when its URL is configured. Connection and response timeouts bound the call; unavailable, invalid, unsupported, and error responses use the configured `ServiceType` default duration.
 
 ---
 
@@ -565,13 +567,15 @@ and:
 DefaultServiceDurationPredictor
 ```
 
-The current implementation returns the `ServiceType` default duration.
+The primary implementation sends the service type name, vehicle make/model/year, and service weekday to the FastAPI service. The weekday uses the appointment time when present, otherwise the request time, interpreted in the configured service time zone. Years outside the FastAPI input schema fall back to the service type default rather than being altered.
 
-This is a deterministic placeholder/implementation boundary, not an ML model.
+`DefaultServiceDurationPredictor` remains available as the deterministic fallback. The prediction is stored as a service-stage duration and is only an input to existing backend operations. The backend continues to own priority handling, resource compatibility and assignment, queue state, and dynamic waiting-time calculations; the ML service does not predict wait time.
 
-### Planned integration
+Configuration uses `OPTISERVE_ML_BASE_URL` (default `http://localhost:8000`). Timeout, service-time-zone, and accepted prediction bounds are configurable in `optiserve-backend/src/main/resources/application.properties`.
 
-The intended future architecture is:
+### Service-duration request flow
+
+The current request flow is:
 
 ```text
 Spring Boot
@@ -580,7 +584,7 @@ Spring Boot
 ServiceDurationPredictor
      |
      v
-ML-backed implementation
+MlServiceDurationPredictor
      |
      v
 FastAPI prediction service
@@ -1024,7 +1028,7 @@ Service-request creation creates the workflow and ordered stages atomically. It 
 | Maven Wrapper | Build and dependency management |
 | JUnit / Spring test support | Automated testing |
 
-The current backend does **not** include an external ML dependency or FastAPI client yet.
+The backend uses Spring's HTTP client to call the FastAPI duration endpoint; no separate ML Java dependency is required.
 
 ---
 
@@ -1109,6 +1113,7 @@ OPTISERVE_DB_URL
 OPTISERVE_DB_USERNAME
 OPTISERVE_DB_PASSWORD
 OPTISERVE_JWT_SECRET
+OPTISERVE_ML_BASE_URL
 ```
 
 For one-time local administrator provisioning, activate the `local` Spring profile and optionally set `OPTISERVE_ADMIN_BOOTSTRAP_ENABLED=true`, `OPTISERVE_ADMIN_EMAIL`, and `OPTISERVE_ADMIN_PASSWORD` in the backend process environment before starting the application. The password is encoded before persistence and is not logged. After the first successful startup, disable the bootstrap flag and remove the password variable. Public registration always creates customer accounts.
@@ -1119,6 +1124,7 @@ Example:
 OPTISERVE_DB_URL=jdbc:postgresql://localhost:5432/optiserve
 OPTISERVE_DB_USERNAME=postgres
 OPTISERVE_DB_PASSWORD=<your-local-password>
+OPTISERVE_ML_BASE_URL=http://localhost:8000
 ```
 
 Set `OPTISERVE_JWT_SECRET` to a Base64-encoded random value of at least 32 bytes. Example for the current PowerShell session:
@@ -1132,6 +1138,8 @@ $env:OPTISERVE_JWT_SECRET = [Convert]::ToBase64String($bytes)
 ```
 
 `application.properties` reads this environment variable; do not commit real database credentials or JWT signing keys.
+
+The backend calls the FastAPI duration service at `OPTISERVE_ML_BASE_URL` (default `http://localhost:8000`). Optional timeout, service-time-zone, and accepted prediction-bound settings are documented in `optiserve-backend/src/main/resources/application.properties`. The API predicts service duration only; the backend continues to select queue work, enforce resource compatibility, and calculate dynamic waiting estimates. When ML is unavailable or its features/prediction are unsupported, request creation uses the service type's configured default duration.
 
 The application is configured to:
 
@@ -1307,16 +1315,14 @@ OptiServe is also designed to demonstrate concepts from multiple subjects.
 
 ## In Progress
 
-- [ ] Separate ML service for service-duration prediction
-- [ ] Spring Boot integration with the ML prediction service
+- [x] Separate ML service for service-duration prediction
+- [x] Spring Boot integration with the ML prediction service
 
 ## Planned
 
 Potential later work includes:
 
-- [ ] Resilient ML client with timeout/fallback behavior
 - [ ] Contract tests between Spring Boot and FastAPI
-- [ ] ML-backed service-duration prediction
 - [ ] No-show prediction
 - [ ] Customer notification/approval workflow
 - [ ] Operational analytics
@@ -1329,9 +1335,9 @@ Planned features are intentionally not represented as current functionality.
 
 ---
 
-# Future ML Architecture
+# Current ML Architecture
 
-The intended architecture is:
+The current service-duration prediction path is:
 
 ```text
                   ┌──────────────────────┐
@@ -1361,7 +1367,7 @@ The intended architecture is:
                   └──────────────────────┘
 ```
 
-The ML service will predict **service duration**.
+The ML service predicts **service duration**. Spring Boot bounds and validates the response and falls back to the service type default when needed.
 
 It will not become the authority for queue order, resource state, or waiting-time promises.
 

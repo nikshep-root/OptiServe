@@ -151,6 +151,20 @@ public class ServiceStage {
         return predictedServiceDuration;
     }
 
+    public void updatePredictedServiceDuration(Duration predictedServiceDuration) {
+        if (status != ServiceStageStatus.PENDING
+                && status != ServiceStageStatus.ELIGIBLE
+                && status != ServiceStageStatus.QUEUED) {
+            throw new IllegalStateException("A service duration cannot be updated after a stage is assigned");
+        }
+        Objects.requireNonNull(predictedServiceDuration, "predictedServiceDuration must not be null");
+        if (predictedServiceDuration.isNegative() || predictedServiceDuration.isZero()) {
+            throw new IllegalArgumentException("predictedServiceDuration must be positive");
+        }
+        this.predictedServiceDuration = predictedServiceDuration;
+        updatedAt = Instant.now();
+    }
+
     public Instant getCreatedAt() {
         return createdAt;
     }
