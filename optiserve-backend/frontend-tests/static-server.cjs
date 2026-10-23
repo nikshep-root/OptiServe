@@ -3,6 +3,7 @@ const { readFile } = require("node:fs/promises");
 const path = require("node:path");
 
 const staticRoot = path.resolve(__dirname, "../src/main/resources/static");
+const port = Number(process.env.PLAYWRIGHT_TEST_PORT || 4174);
 const contentTypes = {
   ".css": "text/css; charset=utf-8",
   ".html": "text/html; charset=utf-8",
@@ -33,4 +34,4 @@ http.createServer(async (request, response) => {
   } catch {
     response.writeHead(404).end("Not found");
   }
-}).listen(4173, "127.0.0.1");
+}).listen(port, "127.0.0.1");

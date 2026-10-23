@@ -1953,6 +1953,19 @@ tbody tr[hidden] {
   min-height:34px;
   font-size:9px
 }
+.assignment-controls {
+  min-width:170px
+}
+.assignment-action-error {
+  max-width:230px;
+  margin:7px 0 0;
+  color:#ffaaa0;
+  font-size:10px;
+  line-height:1.45
+}
+.assignment-controls>[data-action="start-assignment"] {
+  white-space:nowrap
+}
 .topbar-menu {
   cursor:pointer
 }
