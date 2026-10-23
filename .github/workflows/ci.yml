@@ -17,6 +17,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  frontend-regression-tests:
+    name: Frontend Regression Tests
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: optiserve-backend
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: optiserve-backend/package-lock.json
+
+      - name: Install frontend test dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Run frontend regression tests
+        run: npm run test:frontend
+
   build-and-test:
     name: Build and Test
     runs-on: ubuntu-latest

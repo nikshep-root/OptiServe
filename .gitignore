@@ -5,6 +5,9 @@
 # Generated build output
 target/
 build/
+optiserve-backend/node_modules/
+optiserve-backend/test-results/
+optiserve-backend/playwright-report/
 
 # IDE metadata
 .idea/
