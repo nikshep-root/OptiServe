@@ -1153,6 +1153,14 @@ Windows:
 mvnw.cmd test
 ```
 
+For a complete local verification run on Windows without using your development database, start the dedicated disposable PostgreSQL 16 test container:
+
+```powershell
+.\scripts\verify-with-test-postgres.ps1
+```
+
+This runs `mvnw.cmd -B clean verify` and defaults to host port `5433`. Docker Desktop must be running. See [docs/LOCAL_TESTING.md](docs/LOCAL_TESTING.md) for prerequisites, port overrides, cleanup behavior, and the GitHub Actions comparison.
+
 ## Build
 
 ```bat
