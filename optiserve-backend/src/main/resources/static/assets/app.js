@@ -485,7 +485,25 @@ function vehiclesPage() {
 function assignmentsPanel() {
   if (dashboardData.errors.assignments) return errorPanel("Assignments unavailable", dashboardData.errors.assignments.message);
   if (!dashboardData.assignments.length) return `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE / ASSIGNMENTS</span><h2>Assignment history</h2></div></div><div class="empty-inline"><span>${icon("check", 18)}</span><div><strong>No assignments yet</strong><p>Assignments for your service requests will appear here.</p></div></div></section>`;
-  return `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE / ASSIGNMENTS</span><h2>Assignment history</h2><p>Assignment state is refreshed from the backend.</p></div></div><div class="table-wrap"><table><thead><tr><th>VEHICLE</th><th>SERVICE</th><th>RESOURCE</th><th>STATUS</th><th>ASSIGNED</th></tr></thead><tbody>${dashboardData.assignments.map((item) => `<tr><td>${escapeHtml(item.vehicleRegistrationNumber)}</td><td>${escapeHtml(item.serviceTypeName)}</td><td>${escapeHtml(item.resourceName)}</td><td><span class="status-tag status-${String(item.assignmentStatus).toLowerCase()}">${escapeHtml(item.assignmentStatus.replaceAll("_", " "))}</span></td><td>${escapeHtml(formatDate(item.assignedAt))}</td></tr>`).join("")}</tbody></table></div></section>`;
+  const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
+  return `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE / ASSIGNMENTS</span><h2>Assignment history</h2><p>Assignment state is refreshed from the backend.</p></div></div><div class="table-wrap"><table><thead><tr><th>VEHICLE</th><th>SERVICE</th><th>RESOURCE</th><th>STATUS</th><th>ASSIGNED</th>${admin ? "<th>ACTIONS</th>" : ""}</tr></thead><tbody>${dashboardData.assignments.map((item) => `<tr><td>${escapeHtml(item.vehicleRegistrationNumber)}</td><td>${escapeHtml(item.serviceTypeName)}</td><td>${escapeHtml(item.resourceName)}</td><td><span class="status-tag status-${String(item.assignmentStatus).toLowerCase()}">${escapeHtml(item.assignmentStatus.replaceAll("_", " "))}</span></td><td>${escapeHtml(formatDate(item.assignedAt))}</td>${admin ? `<td>${assignmentControls(item)}</td>` : ""}</tr>`).join("")}</tbody></table></div></section>`;
+}
+
+const assignmentActionsInFlight = new Set();
+const assignmentActionErrors = new Map();
+const assignmentDurationDrafts = new Map();
+
+function assignmentControls(assignment) {
+  const id = escapeHtml(assignment.assignmentId);
+  const busy = assignmentActionsInFlight.has(assignment.assignmentId);
+  const error = assignmentActionErrors.get(assignment.assignmentId);
+  let controls = "—";
+  if (assignment.assignmentStatus === "ASSIGNED") {
+    controls = `<button class="button button-outline" data-action="start-assignment" data-id="${id}" ${busy ? "disabled" : ""}>Start service</button>`;
+  } else if (assignment.assignmentStatus === "IN_PROGRESS") {
+    controls = `<div class="assignment-actions"><label class="duration-input">Actual minutes <input type="number" min="1" step="1" required placeholder="Minutes" aria-label="Actual duration in minutes" data-duration-for="${id}" value="${escapeHtml(assignmentDurationDrafts.get(assignment.assignmentId) || "")}" ${busy ? "disabled" : ""}></label><button class="button button-lime" data-action="complete-assignment" data-id="${id}" ${busy ? "disabled" : ""}>Complete service ${icon("check", 15)}</button></div>`;
+  }
+  return `<div class="assignment-controls">${controls}${error ? `<p class="assignment-action-error" role="alert">${escapeHtml(error)}</p>` : ""}</div>`;
 }
 
 function serviceTypesPage() {
@@ -669,6 +687,11 @@ function wireDashboardActions() {
     catch (error) { showToast(error.message); button.disabled = false; }
   }));
   document.querySelectorAll('[data-action="assign-next"]').forEach((button) => button.addEventListener("click", assignNext));
+  document.querySelectorAll('[data-action="start-assignment"]').forEach((button) => button.addEventListener("click", startAssignment));
+  document.querySelectorAll('[data-action="complete-assignment"]').forEach((button) => button.addEventListener("click", completeAssignment));
+  document.querySelectorAll("[data-duration-for]").forEach((input) => input.addEventListener("input", () => {
+    assignmentDurationDrafts.set(input.dataset.durationFor, input.value);
+  }));
 }
 
 async function saveProfile(event) {
@@ -878,37 +901,54 @@ async function assignNext(event) {
     if (assignment.result !== "ASSIGNED") {
       region.innerHTML = `<div class="assignment-result subdued"><strong>No assignment made</strong><span>${escapeHtml(assignment.result.replaceAll("_", " "))}</span></div>`;
     } else {
-      sessionStorage.setItem("optiserve.assignmentId", assignment.assignmentId);
-      region.innerHTML = `<div class="assignment-result"><div><span class="panel-kicker">ASSIGNED / ${escapeHtml(assignment.assignmentStatus)}</span><strong>${escapeHtml(assignment.vehicleRegistrationNumber)} · ${escapeHtml(assignment.serviceTypeName)}</strong><span>${escapeHtml(assignment.resourceName)} · ${escapeHtml(assignment.priority)}</span></div><div class="assignment-actions"><button class="button button-outline" data-action="start-assignment" data-id="${assignment.assignmentId}">Start service</button></div></div>`;
-      region.querySelector('[data-action="start-assignment"]').addEventListener("click", () => startAssignment(assignment.assignmentId));
+      region.innerHTML = `<div class="assignment-result"><div><span class="panel-kicker">ASSIGNED / ${escapeHtml(assignment.assignmentStatus)}</span><strong>${escapeHtml(assignment.vehicleRegistrationNumber)} · ${escapeHtml(assignment.serviceTypeName)}</strong><span>${escapeHtml(assignment.resourceName)} · ${escapeHtml(assignment.priority)}</span></div><span>Continue from Assignment history below.</span></div>`;
       showToast("Next compatible resource assigned.");
     }
-  } catch (error) { showToast(error.message); }
+  } catch (error) { showToast(displayError(error)); }
   finally { button.disabled = false; }
 }
 
-async function startAssignment(id) {
+async function startAssignment(event) {
+  const button = event.currentTarget;
+  const id = button.dataset.id;
+  if (sessionStorage.getItem(ROLE_KEY) !== "ADMIN" || assignmentActionsInFlight.has(id)) return;
+  assignmentActionsInFlight.add(id);
+  assignmentActionErrors.delete(id);
+  button.disabled = true;
   try {
     await api(`/api/assignments/${id}/start`, { method: "POST" });
-    const region = document.querySelector("#assignment-result");
-    region.querySelector(".assignment-actions").innerHTML = `<label class="duration-input">Actual minutes <input type="number" min="1" step="1" required placeholder="Minutes" aria-label="Actual duration in minutes"></label><button class="button button-lime" data-action="complete-assignment">Complete service ${icon("check", 15)}</button>`;
-    region.querySelector('[data-action="complete-assignment"]').addEventListener("click", () => completeAssignment(id));
     showToast("Service started.");
-  } catch (error) { showToast(error.message); }
+  } catch (error) {
+    assignmentActionErrors.set(id, displayError(error));
+  } finally {
+    assignmentActionsInFlight.delete(id);
+    await loadDashboard();
+  }
 }
 
-async function completeAssignment(id) {
-  const region = document.querySelector("#assignment-result");
-  const durationInput = region.querySelector("input[type=number]");
-  if (!durationInput.reportValidity()) return;
+async function completeAssignment(event) {
+  const button = event.currentTarget;
+  const id = button.dataset.id;
+  if (sessionStorage.getItem(ROLE_KEY) !== "ADMIN" || assignmentActionsInFlight.has(id)) return;
+  const durationInput = document.querySelector(`[data-duration-for="${CSS.escape(id)}"]`);
+  if (!durationInput?.reportValidity()) return;
   const actualDurationMinutes = Number(durationInput.value);
+  if (!Number.isFinite(actualDurationMinutes) || actualDurationMinutes <= 0) return;
+  assignmentActionsInFlight.add(id);
+  assignmentActionErrors.delete(id);
+  button.disabled = true;
+  durationInput.disabled = true;
   try {
     await api(`/api/assignments/${id}/complete`, { method: "POST", body: JSON.stringify({ actualDurationMinutes }) });
-    region.innerHTML = `<div class="assignment-result complete"><strong>Service completed</strong><span>Workflow state updated by OPTISERVE.</span></div>`;
-    sessionStorage.removeItem("optiserve.assignmentId");
+    assignmentDurationDrafts.delete(id);
     showToast("Service completed and workflow updated.");
+  } catch (error) {
+    assignmentDurationDrafts.set(id, durationInput.value);
+    assignmentActionErrors.set(id, displayError(error));
+  } finally {
+    assignmentActionsInFlight.delete(id);
     await loadDashboard();
-  } catch (error) { showToast(error.message); }
+  }
 }
 
 function showToast(message) {
