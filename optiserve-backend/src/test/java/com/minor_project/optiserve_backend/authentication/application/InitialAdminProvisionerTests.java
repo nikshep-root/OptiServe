@@ -13,6 +13,10 @@ import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.boot.DefaultApplicationArguments;
+import org.springframework.boot.convert.ApplicationConversionService;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 class InitialAdminProvisionerTests {
@@ -51,6 +55,23 @@ class InitialAdminProvisionerTests {
     }
 
     @Test
+    void repeatedStartupProvisionsOnlyOnce() throws Exception {
+        AuthUserRepository users = org.mockito.Mockito.mock(AuthUserRepository.class);
+        PasswordEncoder encoder = org.mockito.Mockito.mock(PasswordEncoder.class);
+        when(users.findByEmail("owner@example.com"))
+                .thenReturn(Optional.empty(), Optional.of(AuthUser.provisionAdmin("owner@example.com", "encoded-hash")));
+        when(encoder.encode("safe-password")).thenReturn("encoded-hash");
+        InitialAdminProvisioner provisioner = new InitialAdminProvisioner(
+                users, encoder, "owner@example.com", "safe-password");
+
+        provisioner.run(new DefaultApplicationArguments());
+        provisioner.run(new DefaultApplicationArguments());
+
+        verify(users).save(any(AuthUser.class));
+        verify(encoder).encode("safe-password");
+    }
+
+    @Test
     void refusesToPromoteAnExistingCustomerAccount() {
         AuthUserRepository users = org.mockito.Mockito.mock(AuthUserRepository.class);
         PasswordEncoder encoder = org.mockito.Mockito.mock(PasswordEncoder.class);
@@ -76,5 +97,78 @@ class InitialAdminProvisionerTests {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessage("Initial administrator email configuration is invalid.");
         verify(users, never()).save(any());
+    }
+
+    @Test
+    void rejectsMalformedEmailAndShortOrOverlongPasswords() {
+        AuthUserRepository users = org.mockito.Mockito.mock(AuthUserRepository.class);
+        PasswordEncoder encoder = org.mockito.Mockito.mock(PasswordEncoder.class);
+
+        assertThatThrownBy(() -> new InitialAdminProvisioner(users, encoder, "owner@", "safe-password")
+                .run(new DefaultApplicationArguments()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Initial administrator email configuration is invalid.");
+        assertThatThrownBy(() -> new InitialAdminProvisioner(users, encoder, "owner@example.com", "short")
+                .run(new DefaultApplicationArguments()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Initial administrator password must be 8 to 72 UTF-8 bytes.");
+        assertThatThrownBy(() -> new InitialAdminProvisioner(users, encoder, "owner@example.com", "é".repeat(37))
+                .run(new DefaultApplicationArguments()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("Initial administrator password must be 8 to 72 UTF-8 bytes.");
+        verify(users, never()).findByEmail(any());
+        verify(users, never()).save(any());
+        verify(encoder, never()).encode(any());
+    }
+
+    @Test
+    void adminBootstrapProfileRequiresTheExistingExplicitEnableFlag() {
+        provisionerContext()
+                .withPropertyValues(
+                        "spring.profiles.active=admin-bootstrap",
+                        "optiserve.admin.email=owner@example.com",
+                        "optiserve.admin.password=safe-password")
+                .run(context -> assertThat(context).doesNotHaveBean(InitialAdminProvisioner.class));
+    }
+
+    @Test
+    void adminBootstrapAndLocalProfilesActivateOnlyWhenOptedIn() {
+        for (String profile : new String[] {"admin-bootstrap", "local"}) {
+            provisionerContext()
+                    .withPropertyValues(
+                            "spring.profiles.active=" + profile,
+                            "optiserve.admin.bootstrap.enabled=true",
+                            "optiserve.admin.email=owner@example.com",
+                            "optiserve.admin.password=safe-password")
+                    .run(context -> {
+                        assertThat(context).hasNotFailed();
+                        assertThat(context).hasSingleBean(InitialAdminProvisioner.class);
+                    });
+        }
+    }
+
+    @Test
+    void productionProfileCannotActivateTheProvisionerEvenIfTheFlagIsSet() {
+        provisionerContext()
+                .withPropertyValues(
+                        "spring.profiles.active=prod",
+                        "optiserve.admin.bootstrap.enabled=true",
+                        "optiserve.admin.email=owner@example.com",
+                        "optiserve.admin.password=safe-password")
+                .run(context -> assertThat(context).doesNotHaveBean(InitialAdminProvisioner.class));
+    }
+
+    private ApplicationContextRunner provisionerContext() {
+        return new ApplicationContextRunner()
+                .withInitializer(context -> context.getBeanFactory().setConversionService(
+                        ApplicationConversionService.getSharedInstance()))
+                .withBean(AuthUserRepository.class, () -> org.mockito.Mockito.mock(AuthUserRepository.class))
+                .withBean(PasswordEncoder.class, () -> org.mockito.Mockito.mock(PasswordEncoder.class))
+                .withUserConfiguration(ProvisionerConfiguration.class);
+    }
+
+    @Configuration(proxyBeanMethods = false)
+    @Import(InitialAdminProvisioner.class)
+    static class ProvisionerConfiguration {
     }
 }
