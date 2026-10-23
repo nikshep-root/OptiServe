@@ -1116,7 +1116,22 @@ OPTISERVE_JWT_SECRET
 OPTISERVE_ML_BASE_URL
 ```
 
-For one-time local administrator provisioning, activate the `local` Spring profile and optionally set `OPTISERVE_ADMIN_BOOTSTRAP_ENABLED=true`, `OPTISERVE_ADMIN_EMAIL`, and `OPTISERVE_ADMIN_PASSWORD` in the backend process environment before starting the application. The password is encoded before persistence and is not logged. After the first successful startup, disable the bootstrap flag and remove the password variable. Public registration always creates customer accounts.
+For one-time administrator provisioning, the existing provisioner is available only with the `local` or explicitly activated `admin-bootstrap` Spring profile, and it also requires `OPTISERVE_ADMIN_BOOTSTRAP_ENABLED=true` plus valid `OPTISERVE_ADMIN_EMAIL` and `OPTISERVE_ADMIN_PASSWORD` values. Passwords are encoded before persistence and are never logged. Provisioning refuses to promote an existing non-admin account and leaves an existing administrator unchanged. Public registration always creates customer accounts.
+
+### One-time Render administrator provisioning
+
+For the initial production setup, temporarily add these environment variables to the Render backend service:
+
+```text
+SPRING_PROFILES_ACTIVE=admin-bootstrap
+OPTISERVE_ADMIN_BOOTSTRAP_ENABLED=true
+OPTISERVE_ADMIN_EMAIL=<the intended administrator email>
+OPTISERVE_ADMIN_PASSWORD=<a unique strong password, 8–72 UTF-8 bytes>
+```
+
+If the service already requires another Spring profile, keep it and add `admin-bootstrap` to the comma-separated profile list. Save the environment changes and allow Render to deploy. The provisioner creates an administrator only when that email does not already exist. If the email belongs to a customer account, startup fails safely; use a different administrator email rather than promoting the customer.
+
+After deployment succeeds, verify that the administrator can sign in, then immediately remove `OPTISERVE_ADMIN_BOOTSTRAP_ENABLED`, `OPTISERVE_ADMIN_PASSWORD`, and `OPTISERVE_ADMIN_EMAIL` from Render. Remove `admin-bootstrap` from `SPRING_PROFILES_ACTIVE` while preserving any other required profiles, then redeploy. The bootstrap flag defaults to `false`; the profile and credentials must not be left configured after provisioning. Never put these values in source control or build logs.
 
 Example:
 

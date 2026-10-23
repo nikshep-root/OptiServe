@@ -4,6 +4,7 @@ import com.minor_project.optiserve_backend.authentication.domain.AuthUser;
 import com.minor_project.optiserve_backend.authentication.persistence.AuthUserRepository;
 import java.nio.charset.StandardCharsets;
 import java.util.Locale;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
@@ -14,9 +15,14 @@ import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
 @Component
-@Profile("local")
+@Profile({"local", "admin-bootstrap"})
 @ConditionalOnProperty(prefix = "optiserve.admin.bootstrap", name = "enabled", havingValue = "true")
 public class InitialAdminProvisioner implements ApplicationRunner {
+
+    private static final Pattern VALID_EMAIL = Pattern.compile(
+            "^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@"
+                    + "[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?"
+                    + "(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)+$");
 
     private final AuthUserRepository users;
     private final PasswordEncoder passwordEncoder;
@@ -38,8 +44,7 @@ public class InitialAdminProvisioner implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments arguments) {
         String normalizedEmail = email == null ? "" : email.trim().toLowerCase(Locale.ROOT);
-        if (normalizedEmail.isBlank() || normalizedEmail.length() > 320 || normalizedEmail.contains(" ")
-                || !normalizedEmail.contains("@")) {
+        if (normalizedEmail.length() > 320 || !VALID_EMAIL.matcher(normalizedEmail).matches()) {
             throw new IllegalStateException("Initial administrator email configuration is invalid.");
         }
         if (password == null || password.length() < 8
