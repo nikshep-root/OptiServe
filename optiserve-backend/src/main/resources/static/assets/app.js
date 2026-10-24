@@ -407,13 +407,23 @@ function authPage(mode = "login") {
 function dashboardShell(active = "overview") {
   const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
   const nav = admin
-    ? [["overview", "Workshop overview", "grid"], ["requests", "Service requests", "layers"], ["queue", "Live queue", "clock"], ["resources", "Resources", "wrench"], ["service-types", "Service types", "layers"]]
+    ? [["overview", "Workshop overview", "grid"], ["analytics", "Analytics", "grid"], ["requests", "Service requests", "layers"], ["queue", "Live queue", "clock"], ["resources", "Resources", "wrench"], ["service-types", "Service types", "layers"]]
     : [["overview", "Overview", "grid"], ["requests", "Service requests", "layers"], ["queue", "My service queue", "clock"], ["vehicles", "My vehicles", "wrench"], ["profile", "Profile", "grid"]];
   return `<div class="app-shell"><aside class="app-sidebar" id="sidebar"><div class="sidebar-brand">${brand(true)}<span>OPERATIONS</span></div><div class="sidebar-caption">WORKSPACE</div><nav class="app-nav" aria-label="Operations navigation">${nav.map(([id, label, glyph]) => `<a href="#/app/${id}" class="${active === id ? "selected" : ""}" ${active === id ? 'aria-current="page"' : ""}>${icon(glyph, 17)}<span>${label}</span>${id === "queue" ? '<i class="nav-dot"></i>' : ""}</a>`).join("")}</nav><div class="sidebar-spacer"></div><div class="sidebar-foot"><div class="system-state"><i></i><span>API CONNECTION</span><b id="connection-label">CHECKING</b></div><button id="sign-out" class="sign-out">${icon("logout", 16)} Sign out</button></div></aside><div class="app-main"><header class="app-topbar"><button class="topbar-menu" id="menu-toggle" type="button" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="false">${icon("menu")}</button><div class="breadcrumbs"><span>OPTISERVE</span><i>/</i><strong>${nav.find(([id]) => id === active)?.[1] || "Overview"}</strong></div><div class="topbar-right"><span class="topbar-date">${new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric" }).format(new Date())}</span><span class="avatar">OP</span></div></header><main class="dashboard-content" id="dashboard-content"><div class="loading-state"><span class="spinner"></span><p>Connecting to your workshop…</p></div></main></div></div>`;
 }
 
-let dashboardData = { customer: null, vehicles: [], requests: [], queue: [], resources: [], serviceTypes: [], assignments: [], waits: {}, errors: {} };
+let dashboardData = { customer: null, vehicles: [], requests: [], queue: [], resources: [], serviceTypes: [], assignments: [], analytics: null, waits: {}, errors: {} };
 let dashboardNavigationCleanup = null;
+let activeDashboardPage = "overview";
+let analyticsRange = null;
+
+function defaultAnalyticsRange() {
+  const to = new Date();
+  const from = new Date(to);
+  from.setDate(from.getDate() - 29);
+  const dateValue = (date) => date.toISOString().slice(0, 10);
+  return { from: dateValue(from), to: dateValue(to) };
+}
 
 async function loadDashboard() {
   dashboardData.errors = {};
@@ -423,13 +433,16 @@ async function loadDashboard() {
     admin ? Promise.resolve(null) : api("/api/customers/me"),
     admin ? Promise.resolve([]) : api("/api/vehicles"),
     api("/api/service-requests"), api("/api/queue"), api("/api/resources"), api("/api/service-types"), api("/api/assignments"),
+    admin && activeDashboardPage === "analytics"
+      ? api(`/api/admin/analytics?from=${encodeURIComponent(analyticsRange.from)}&to=${encodeURIComponent(analyticsRange.to)}`)
+      : Promise.resolve(null),
   ]);
-  const names = ["customer", "vehicles", "requests", "queue", "resources", "serviceTypes", "assignments"];
+  const names = ["customer", "vehicles", "requests", "queue", "resources", "serviceTypes", "assignments", "analytics"];
   outcomes.forEach((result, index) => {
     if (result.status === "fulfilled") dashboardData[names[index]] = result.value;
     else {
       dashboardData.errors[names[index]] = result.reason;
-      dashboardData[names[index]] = names[index] === "customer" ? null : [];
+      dashboardData[names[index]] = names[index] === "customer" || names[index] === "analytics" ? null : [];
     }
   });
   if (outcomes.some((result) => result.status === "rejected" && result.reason.status === 401)) {
@@ -523,6 +536,23 @@ function resourceManagementPage() {
   return `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">WORKSHOP / CAPACITY</span><h2>Resource management</h2><p>Set availability and service compatibility for each workshop resource.</p></div><button class="button button-lime" data-action="add-resource">Add resource ${icon("plus", 15)}</button></div>${cards ? `<div class="resource-grid">${cards}</div>` : `<div class="empty-state"><h3>No resources configured</h3><p>Add a workshop resource, then assign compatible service types.</p></div>`}</section>`;
 }
 
+function analyticsPage() {
+  const analytics = dashboardData.analytics;
+  const rangeForm = `<form class="analytics-range" id="analytics-range-form"><label>From<input type="date" name="from" required value="${escapeHtml(analyticsRange.from)}"></label><label>To<input type="date" name="to" required value="${escapeHtml(analyticsRange.to)}"></label><button class="button button-outline" type="submit">Update range</button></form>`;
+  const header = `<section class="panel analytics-panel"><div class="panel-heading"><div><span class="panel-kicker">HISTORICAL / SELECTED PERIOD</span><h2>Workshop performance</h2><p>UTC dates · ${escapeHtml(analyticsRange.from)} to ${escapeHtml(analyticsRange.to)}</p></div>${rangeForm}</div>`;
+  if (dashboardData.errors.analytics) return `${header}${errorPanel("Analytics unavailable", displayError(dashboardData.errors.analytics))}</section>`;
+  if (!analytics) return `${header}<div class="loading-state"><span class="spinner"></span><p>Loading workshop analytics…</p></div></section>`;
+  const historical = analytics.historical;
+  const current = analytics.current;
+  const maxTrend = Math.max(1, ...analytics.completionTrend.map((point) => point.completedRequests));
+  const trend = analytics.completionTrend.map((point, index) => {
+    const label = index === 0 || index === analytics.completionTrend.length - 1 || new Date(`${point.date}T00:00:00Z`).getUTCDate() === 1;
+    const height = point.completedRequests === 0 ? 2 : Math.max(8, Math.round((point.completedRequests / maxTrend) * 100));
+    return `<div class="analytics-trend-day" role="listitem" title="${escapeHtml(point.date)}: ${point.completedRequests} completed"><span class="analytics-bar" style="--bar-height:${height}%"></span>${label ? `<small>${escapeHtml(point.date.slice(5))}</small>` : ""}<span class="sr-only">${escapeHtml(point.date)}: ${point.completedRequests} completed requests</span></div>`;
+  }).join("");
+  return `${header}<div class="analytics-metrics"><article class="analytics-metric"><span>REQUESTS CREATED</span><strong>${historical.requestsCreated}</strong><small>Requested during the selected period</small></article><article class="analytics-metric"><span>REQUESTS COMPLETED</span><strong>${historical.requestsCompleted}</strong><small>Final workflow stage completed in period</small></article><article class="analytics-metric"><span>AVG ACTUAL DURATION</span><strong>${historical.averageActualServiceDurationMinutes == null ? "—" : `${Number(historical.averageActualServiceDurationMinutes).toFixed(1)}<i>min</i>`}</strong><small>Completed assignments with recorded actual duration</small></article><article class="analytics-metric"><span>PREDICTION ERROR · MAE</span><strong>${historical.meanAbsolutePredictionErrorMinutes == null ? "—" : `${Number(historical.meanAbsolutePredictionErrorMinutes).toFixed(1)}<i>min</i>`}</strong><small>Mean absolute error · ${historical.predictionErrorSampleCount} samples</small></article></div><div class="analytics-live" role="region" aria-label="Current workshop state"><div><span>WAITING QUEUE</span><strong>${current.waitingQueueSize}</strong></div><div><span>ACTIVE ASSIGNMENTS</span><strong>${current.activeAssignments}</strong></div><div><span>AVAILABLE RESOURCES</span><strong>${current.availableResources}</strong></div><div><span>BUSY RESOURCES</span><strong>${current.busyResources}</strong></div><div><span>OFFLINE RESOURCES</span><strong>${current.offlineResources}</strong></div><small>Live snapshot · not filtered by date range</small></div><section class="analytics-trend-panel"><div class="analytics-section-heading"><div><span class="panel-kicker">COMPLETION / DAILY</span><h3>Completed service requests</h3></div><span>Requests completed per UTC day</span></div>${analytics.completionTrend.every((point) => point.completedRequests === 0) ? `<div class="empty-state analytics-empty"><h3>No completions in this period</h3><p>Completed requests will appear here when their final workflow stage is completed.</p></div>` : `<div class="analytics-trend-scroll"><div class="analytics-trend" style="--trend-days:${analytics.completionTrend.length}" role="list" aria-label="Daily completed service requests from ${escapeHtml(analyticsRange.from)} through ${escapeHtml(analyticsRange.to)}">${trend}</div></div>`}</section></section>`;
+}
+
 function requestRow(request, typesById) {
   const stage = request.stages?.[0];
   const type = typesById.get(stage?.serviceTypeId);
@@ -559,18 +589,19 @@ function resourceCards() {
 
 function renderDashboard(page = "overview") {
   const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
-  const title = { overview: admin ? "Workshop overview" : "My service overview", requests: "Service requests", queue: admin ? "Live queue" : "My service queue", resources: "Resources", "service-types": "Service types", vehicles: "My vehicles", profile: "Customer profile" }[page] || "Workshop overview";
+  const title = { overview: admin ? "Workshop overview" : "My service overview", analytics: "Operational analytics", requests: "Service requests", queue: admin ? "Live queue" : "My service queue", resources: "Resources", "service-types": "Service types", vehicles: "My vehicles", profile: "Customer profile" }[page] || "Workshop overview";
   const available = dashboardData.resources.filter((resource) => resource.status === "AVAILABLE").length;
   const failed = Object.values(dashboardData.errors).length;
   const serviceCards = `<section class="metric-grid"><article class="metric-card metric-main"><span class="metric-label">${admin ? "ACTIVE REQUESTS" : "MY ACTIVE REQUESTS"}</span><strong>${dashboardData.requests.filter((request) => request.status !== "COMPLETED" && request.status !== "CANCELLED").length.toString().padStart(2, "0")}</strong><div class="metric-foot"><span class="metric-accent"></span>From service request API</div></article><article class="metric-card"><span class="metric-label">${admin ? "WORKSHOP QUEUE" : "MY QUEUED STAGES"}</span><strong>${dashboardData.queue.length.toString().padStart(2, "0")}</strong><div class="metric-foot">${dashboardData.queue.length ? "Backend-calculated timing" : "No active queue entries"}</div></article>${admin ? `<article class="metric-card"><span class="metric-label">RESOURCES READY</span><strong>${dashboardData.resources.filter((resource) => resource.status === "AVAILABLE").length.toString().padStart(2, "0")}</strong><div class="metric-foot">Compatible workshop resources</div></article>` : `<article class="metric-card"><span class="metric-label">MY VEHICLES</span><strong>${dashboardData.vehicles.length.toString().padStart(2, "0")}</strong><div class="metric-foot">Registered to your profile</div></article>`}<article class="metric-card"><span class="metric-label">SERVICE TYPES</span><strong>${dashboardData.serviceTypes.filter((type) => type.active).length.toString().padStart(2, "0")}</strong><div class="metric-foot">Active for service requests</div></article></section>`;
-  const content = page === "profile" && !admin ? profilePage()
+  const content = page === "analytics" && admin ? analyticsPage()
+    : page === "profile" && !admin ? profilePage()
     : page === "vehicles" ? vehiclesPage()
       : page === "queue" ? `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">OPERATIONS / LIVE</span><h2>${admin ? "Queue sequence" : "Your waiting stages"}</h2><p>Wait estimates are calculated by the backend from current queue and resource state.</p></div>${admin ? `<button class="button button-outline" data-action="assign-next">Assign next ${icon("arrow", 15)}</button>` : ""}</div>${queueRows()}</section>${assignmentsPanel()}<section id="assignment-result"></section>`
     : page === "resources" && admin ? resourceManagementPage()
     : page === "service-types" && admin ? serviceTypesPage()
       : page === "requests" ? `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">WORKFLOW / ALL</span><h2>Service requests</h2><p>Current requests and workflow stages from the backend.</p></div><div class="panel-actions"><label class="search-box">${icon("search", 16)}<input id="request-search" type="search" placeholder="Search vehicles or service" aria-label="Search service requests"></label><select class="status-filter" id="request-status-filter" aria-label="Filter by request status"><option value="">All statuses</option>${["CREATED", "WAITING", "ASSIGNED", "IN_SERVICE", "COMPLETED", "CANCELLED", "NO_SHOW"].map((status) => `<option value="${status}">${status.replaceAll("_", " ")}</option>`).join("")}</select>${admin ? "" : `<button class="button button-outline" data-action="new-request">New request ${icon("plus", 15)}</button>`}</div></div>${requestTable()}</section>`
         : `<section class="panel queue-panel"><div class="panel-heading"><div><span class="panel-kicker">WORKFLOW / NOW</span><h2>Queue at a glance</h2><p>Wait estimates update from the live workshop state.</p></div><a class="panel-link" href="#/app/queue">View queue ${icon("arrow", 14)}</a></div>${queueRows()}</section><section class="panel request-panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE / PIPELINE</span><h2>Recent requests</h2><p>Workflow progress for registered service requests.</p></div><a class="panel-link" href="#/app/requests">All requests ${icon("arrow", 14)}</a></div>${requestTable()}</section><section class="dashboard-lower"><div class="panel resource-panel"><div class="panel-heading"><div><span class="panel-kicker">CAPACITY / RESOURCES</span><h2>Workshop resources</h2></div><a class="panel-link" href="#/app/resources">All resources ${icon("arrow", 14)}</a></div>${resourceCards()}</div><aside class="duration-note"><span class="duration-symbol">${icon("clock", 19)}</span><span class="panel-kicker">DURATION &amp; WAITING</span><h3>Two different signals.</h3><p>Duration guidance belongs to each service. Waiting time is calculated dynamically from queue and resource state.</p><div class="duration-note-row"><span>Standard service duration</span><strong>Service type default</strong></div><div class="duration-note-row"><span>Predicted duration</span><strong>Not exposed by current API</strong></div><div class="duration-note-row"><span>Estimated wait</span><strong>Live backend estimate</strong></div></aside></section>`;
-  document.querySelector("#dashboard-content").innerHTML = `<div class="page-heading"><div><span class="eyebrow"><span class="eyebrow-dot"></span> WORKSHOP / OPERATIONS</span><h1>${title}</h1><p>Real-time operational data from the OPTISERVE backend.</p></div><div class="page-heading-actions"><span class="refresh-time">Updated ${new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(new Date())}</span><button class="button button-lime" data-action="refresh">Refresh data ${icon("arrow", 15)}</button></div></div>${failed ? `<div class="partial-warning" role="status">${failed} data source${failed === 1 ? " is" : "s are"} unavailable. Displaying available API data only.</div>` : ""}${serviceCards}${content}<p class="api-footnote">Duration shown is the service type default. Persisted ML-predicted duration is not currently included in the service request API response.</p>`;
+  document.querySelector("#dashboard-content").innerHTML = `<div class="page-heading"><div><span class="eyebrow"><span class="eyebrow-dot"></span> WORKSHOP / OPERATIONS</span><h1>${title}</h1><p>${page === "analytics" ? "Historical performance with a separate live workshop snapshot." : "Real-time operational data from the OPTISERVE backend."}</p></div><div class="page-heading-actions"><span class="refresh-time">Updated ${new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(new Date())}</span><button class="button button-lime" data-action="refresh">Refresh data ${icon("arrow", 15)}</button></div></div>${failed ? `<div class="partial-warning" role="status">${failed} data source${failed === 1 ? " is" : "s are"} unavailable. Displaying available API data only.</div>` : ""}${serviceCards}${content}<p class="api-footnote">Duration shown is the service type default. Persisted ML-predicted duration is not currently included in the service request API response.</p>`;
   wireDashboardActions();
 }
 
@@ -611,6 +642,21 @@ function wireDashboardActions() {
     };
   }
   document.querySelectorAll('[data-action="refresh"], [data-action="retry"]').forEach((button) => button.addEventListener("click", loadDashboard));
+  document.querySelector("#analytics-range-form")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    const from = String(form.get("from"));
+    const to = String(form.get("to"));
+    if (from > to) {
+      const endDate = event.currentTarget.querySelector('input[name="to"]');
+      endDate.setCustomValidity("Choose an end date on or after the start date.");
+      endDate.reportValidity();
+      return;
+    }
+    event.currentTarget.querySelector('input[name="to"]').setCustomValidity("");
+    analyticsRange = { from, to };
+    loadDashboard();
+  });
   document.querySelector("#request-search")?.addEventListener("input", (event) => {
     filterRequests();
   });
@@ -974,9 +1020,14 @@ async function dashboard(page = "overview") {
     location.hash = "#/login";
     return;
   }
-  const adminPage = ["resources", "service-types"].includes(page);
+  const adminPage = ["analytics", "resources", "service-types"].includes(page);
   const customerPage = ["vehicles", "profile"].includes(page);
-  if ((role === "ADMIN" && customerPage) || (role !== "ADMIN" && adminPage)) page = "overview";
+  if ((role === "ADMIN" && customerPage) || (role !== "ADMIN" && adminPage)) {
+    page = "overview";
+    if (location.hash !== "#/app/overview") location.hash = "#/app/overview";
+  }
+  activeDashboardPage = page;
+  if (page === "analytics" && !analyticsRange) analyticsRange = defaultAnalyticsRange();
   app.innerHTML = dashboardShell(page);
   wireDashboardActions();
   await loadDashboard();
