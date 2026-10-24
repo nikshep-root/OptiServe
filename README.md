@@ -201,7 +201,7 @@ The backend calls the separately runnable FastAPI service when its URL is config
 
 ## Application Cache Policy
 
-Spring's local Caffeine cache stores service-type list and by-ID responses, plus each resource's compatible service-type projection. These reads are relatively stable and avoid repeating the same configuration queries. Entries are bounded to 1,000 values and expire after ten minutes as a safety net.
+Spring's local Caffeine cache stores service-type list and by-ID responses, plus each resource's compatible service-type projection. These reads are relatively stable and avoid repeating the same configuration queries. Each cache is bounded to 1,000 entries and entries expire after ten minutes as a safety net.
 
 Successful service-type create, update, and delete/deactivate operations clear service-type and compatibility entries. Successful resource create, update, delete/deactivate, status, and compatibility operations clear compatibility entries. Failed mutations do not evict entries. Resource list/detail responses are not cached because they include current availability. Queue entries, queue positions, waiting-time estimates, scheduler results, active assignments, and resource availability are always read from current operational state.
 
