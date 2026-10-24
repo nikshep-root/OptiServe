@@ -125,8 +125,8 @@ squared error, minutes), **R²** (variance explained).
 
 ## 5. Running the API
 
-```bash
-uvicorn app.main:app --reload --port 8000
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000
 ```
 
 ### `POST /predict-duration`
@@ -168,8 +168,8 @@ when the model is missing, unavailable, corrupt, or cannot be loaded.
 
 ## 6. Tests
 
-```bash
-pytest tests/ -v
+```powershell
+.\.venv\Scripts\python.exe -m pytest tests\ -v
 ```
 
 - `tests/test_preprocessing.py` — feature engineering (vehicle age
@@ -203,7 +203,7 @@ From the repository root, run the focused contract tests:
 
 ```powershell
 Push-Location .\ml-service
-py -m pytest tests\test_contract.py -v
+.\.venv\Scripts\python.exe -m pytest tests\test_contract.py -v
 Pop-Location
 Push-Location .\optiserve-backend
 .\mvnw.cmd -B -Dtest=MlServiceDurationPredictorTests test
@@ -211,8 +211,8 @@ Pop-Location
 ```
 
 Run the complete ML service suite from `ml-service/` with
-`py -m pytest tests/ -v`. Run the full PostgreSQL-backed backend verification
-from the repository root with
+`.\.venv\Scripts\python.exe -m pytest tests\ -v`. Run the full PostgreSQL-backed
+backend verification from the repository root with
 `.\optiserve-backend\scripts\verify-with-test-postgres.ps1`, or from
 `optiserve-backend/` with `.\scripts\verify-with-test-postgres.ps1`. The
 focused Maven test uses only a local stub; the full verification script
