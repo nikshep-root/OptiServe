@@ -12,6 +12,9 @@ import com.minor_project.optiserve_backend.operations.servicetype.api.UpdateServ
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -33,6 +36,11 @@ public class ServiceTypeApplicationService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "serviceTypesById", allEntries = true),
+            @CacheEvict(cacheNames = "serviceTypeLists", allEntries = true),
+            @CacheEvict(cacheNames = "resourceCompatibleServiceTypes", allEntries = true)
+    })
     public ServiceTypeResponse create(CreateServiceTypeRequest request) {
         String name = normalizedName(request.name());
         if (serviceTypeRepository.existsByNameIgnoreCase(name)) {
@@ -50,6 +58,7 @@ public class ServiceTypeApplicationService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "serviceTypeLists", key = "'all'")
     public List<ServiceTypeResponse> findAll() {
         return serviceTypeRepository.findAll(Sort.by(Sort.Direction.ASC, "name"))
                 .stream()
@@ -58,11 +67,17 @@ public class ServiceTypeApplicationService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "serviceTypesById", key = "#id")
     public ServiceTypeResponse findById(UUID id) {
         return toResponse(findEntity(id));
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "serviceTypesById", allEntries = true),
+            @CacheEvict(cacheNames = "serviceTypeLists", allEntries = true),
+            @CacheEvict(cacheNames = "resourceCompatibleServiceTypes", allEntries = true)
+    })
     public ServiceTypeResponse update(UUID id, UpdateServiceTypeRequest request) {
         ServiceType serviceType = findEntity(id);
         String name = request.name() == null ? serviceType.getName() : normalizedName(request.name());
@@ -86,6 +101,11 @@ public class ServiceTypeApplicationService {
     }
 
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(cacheNames = "serviceTypesById", allEntries = true),
+            @CacheEvict(cacheNames = "serviceTypeLists", allEntries = true),
+            @CacheEvict(cacheNames = "resourceCompatibleServiceTypes", allEntries = true)
+    })
     public void delete(UUID id) {
         ServiceType serviceType = findEntity(id);
         if (serviceRequestRepository.existsByServiceTypeId(id)
