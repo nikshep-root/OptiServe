@@ -1207,6 +1207,18 @@ Do not commit credentials or secrets.
 
 ---
 
+# Operational Analytics
+
+Administrators can retrieve a workshop overview from `GET /api/admin/analytics?from=YYYY-MM-DD&to=YYYY-MM-DD`. The range is inclusive, uses UTC calendar dates, and is limited to 366 days.
+
+- **Requests created** counts requests whose `requested_at` falls in the selected period.
+- **Requests completed** and the daily trend count requests whose final workflow stage completed in the period; intermediate stages do not count as completed requests.
+- **Average actual duration** averages non-null actual durations across completed assignments in the period, in minutes.
+- **Prediction error** is mean absolute error in minutes across completed assignments with both predicted and actual durations; the response includes the number of samples and returns `null` when there are no matching samples.
+- **Current queue, assignments, and resource counts** are live database snapshots and are not filtered by the historical date range.
+
+Analytics responses contain aggregate counts only and do not include customer profile data. The model evaluation uses synthetic data and does not establish real-world prediction accuracy.
+
 # Testing
 
 The project uses automated unit and integration testing across:
@@ -1327,20 +1339,18 @@ OptiServe is also designed to demonstrate concepts from multiple subjects.
 - [x] Dynamic wait-time REST endpoint
 - [x] `ServiceDurationPredictor` abstraction
 - [x] Deterministic default duration predictor
+- [x] Spring Boot/FastAPI prediction contract tests
+- [x] Reproducible ML training and held-out evaluation on the bundled synthetic dataset
+- [x] Admin operational analytics for persisted workshop activity
 
-## In Progress
-
-- [x] Separate ML service for service-duration prediction
-- [x] Spring Boot integration with the ML prediction service
+The model evaluation uses the bundled synthetic dataset and documents its limits; those metrics are not evidence of real-world prediction accuracy.
 
 ## Planned
 
 Potential later work includes:
 
-- [ ] Contract tests between Spring Boot and FastAPI
 - [ ] No-show prediction
 - [ ] Customer notification/approval workflow
-- [ ] Operational analytics
 - [ ] Dashboard APIs
 - [ ] Expanded customer management
 - [ ] More detailed resource types/specializations
