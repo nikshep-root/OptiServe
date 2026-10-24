@@ -58,7 +58,7 @@ shared by both training and inference so they can never drift apart:
 
 ## 3. Training
 
-Use Python 3.11 or newer and a clean virtual environment. The scikit-learn,
+Use Python 3.12 and a clean virtual environment. The scikit-learn,
 NumPy, SciPy, joblib, threadpoolctl, and pandas versions are pinned in
 `requirements.txt`. The scikit-learn pin matches the version embedded in the
 committed artifact; joblib is pinned to a newer release to avoid the NumPy
@@ -67,11 +67,22 @@ array-shape deprecation emitted by the former joblib 1.4.2 loader with NumPy
 
 ```powershell
 cd ml-service
-py -3.11 -m venv .venv
+py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 .\.venv\Scripts\python.exe training\generate_synthetic_data.py --rows 4000 --seed 42
 .\.venv\Scripts\python.exe training\train.py
 ```
+
+### Render Python runtime
+
+The repository has no Render service manifest, so it cannot confirm or change
+a dashboard-only runtime override. `ml-service/.python-version` pins the
+service to Python 3.12 when the Render service's **Root Directory** is set to
+`ml-service`. In the Render dashboard, verify that root directory and check
+the Environment page for a `PYTHON_VERSION` value: Render gives that variable
+precedence over `.python-version`, so if it is set, change it to a compatible
+Python 3.12 release. Render's default runtime varies by service creation date
+and may not match CI.
 
 The generator and trainer both use seed `42` by default. Regenerating the CSV
 overwrites the checked-in synthetic dataset, so review that data diff before
