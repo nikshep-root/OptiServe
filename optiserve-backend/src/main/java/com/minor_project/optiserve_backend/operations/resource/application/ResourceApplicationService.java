@@ -17,6 +17,8 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -38,6 +40,7 @@ public class ResourceApplicationService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "resourceCompatibleServiceTypes", allEntries = true)
     public ResourceResponse create(CreateResourceRequest request) {
         String name = normalizedName(request.name());
         if (resourceRepository.existsByNameIgnoreCase(name)) {
@@ -60,6 +63,7 @@ public class ResourceApplicationService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "resourceCompatibleServiceTypes", allEntries = true)
     public ResourceResponse update(UUID id, UpdateResourceRequest request) {
         Resource resource = findResource(id);
         if (request.name() != null) {
@@ -73,6 +77,7 @@ public class ResourceApplicationService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "resourceCompatibleServiceTypes", allEntries = true)
     public ResourceResponse changeStatus(UUID id, UpdateResourceStatusRequest request) {
         Resource resource = findResource(id);
         try {
@@ -84,6 +89,7 @@ public class ResourceApplicationService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "resourceCompatibleServiceTypes", allEntries = true)
     public ResourceResponse addCompatibility(UUID resourceId, UUID serviceTypeId) {
         Resource resource = findResource(resourceId);
         ServiceType serviceType = findServiceType(serviceTypeId);
@@ -95,6 +101,7 @@ public class ResourceApplicationService {
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "resourceCompatibleServiceTypes", allEntries = true)
     public void removeCompatibility(UUID resourceId, UUID serviceTypeId) {
         Resource resource = findResource(resourceId);
         ServiceType serviceType = findServiceType(serviceTypeId);
@@ -105,11 +112,13 @@ public class ResourceApplicationService {
     }
 
     @Transactional(readOnly = true)
+    @Cacheable(cacheNames = "resourceCompatibleServiceTypes", key = "#resourceId")
     public List<CompatibleServiceTypeResponse> findCompatibleServiceTypes(UUID resourceId) {
         return toResponse(findResource(resourceId)).compatibleServiceTypes();
     }
 
     @Transactional
+    @CacheEvict(cacheNames = "resourceCompatibleServiceTypes", allEntries = true)
     public void delete(UUID id) {
         Resource resource = findResource(id);
         if (assignmentRepository.existsByResourceId(id)) {

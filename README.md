@@ -199,6 +199,12 @@ ServiceDurationPredictor
 
 The backend calls the separately runnable FastAPI service when its URL is configured. Connection and response timeouts bound the call; unavailable, invalid, unsupported, and error responses use the configured `ServiceType` default duration.
 
+## Application Cache Policy
+
+Spring's local Caffeine cache stores service-type list and by-ID responses, plus each resource's compatible service-type projection. These reads are relatively stable and avoid repeating the same configuration queries. Each cache is bounded to 1,000 entries and entries expire after ten minutes as a safety net.
+
+Successful service-type create, update, and delete/deactivate operations clear service-type and compatibility entries. Successful resource create, update, delete/deactivate, status, and compatibility operations clear compatibility entries. Failed mutations do not evict entries. Resource list/detail responses are not cached because they include current availability. Queue entries, queue positions, waiting-time estimates, scheduler results, active assignments, and resource availability are always read from current operational state.
+
 ---
 
 # Domain Model
@@ -1342,6 +1348,7 @@ OptiServe is also designed to demonstrate concepts from multiple subjects.
 - [x] Spring Boot/FastAPI prediction contract tests
 - [x] Reproducible ML training and held-out evaluation on the bundled synthetic dataset
 - [x] Admin operational analytics for persisted workshop activity
+- [x] Bounded application caching for service types and resource compatibility
 
 The model evaluation uses the bundled synthetic dataset and documents its limits; those metrics are not evidence of real-world prediction accuracy.
 
