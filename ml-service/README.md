@@ -151,6 +151,37 @@ pytest tests/ -v
   positive integer predictions, deterministic outputs, invalid field handling,
   and graceful unseen categorical values.
 
+### Cross-service contract regression
+
+The canonical JSON examples are in `contracts/ml-duration-prediction/` at the
+repository root. Both the Spring Boot client tests and FastAPI contract tests
+load those same request and response fixtures. The contract tests verify the
+request fields and types against FastAPI's generated OpenAPI schema, exercise
+the endpoint, and cover the supported vehicle-year boundaries (2008 and 2026).
+FastAPI's contract test replaces the prediction function with a fixed value, so
+it neither calls an external service nor loads a trained model. The Spring test
+uses an in-process HTTP stub and checks fallback for malformed responses, HTTP
+errors, timeouts, unavailable service, and invalid duration values.
+
+From the repository root, run the focused contract tests:
+
+```powershell
+Push-Location .\ml-service
+py -m pytest tests\test_contract.py -v
+Pop-Location
+Push-Location .\optiserve-backend
+.\mvnw.cmd -B -Dtest=MlServiceDurationPredictorTests test
+Pop-Location
+```
+
+Run the complete ML service suite from `ml-service/` with
+`py -m pytest tests/ -v`. Run the full PostgreSQL-backed backend verification
+from the repository root with
+`.\optiserve-backend\scripts\verify-with-test-postgres.ps1`, or from
+`optiserve-backend/` with `.\scripts\verify-with-test-postgres.ps1`. The
+focused Maven test uses only a local stub; the full verification script
+provisions its own disposable PostgreSQL test container.
+
 ## 7. Project structure
 
 ```

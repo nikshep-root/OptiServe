@@ -2,6 +2,8 @@ package com.minor_project.optiserve_backend.operations.duration.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minor_project.optiserve_backend.operations.domain.PriorityClass;
 import com.minor_project.optiserve_backend.operations.domain.ServiceRequest;
 import com.minor_project.optiserve_backend.operations.domain.ServiceStage;
@@ -10,6 +12,7 @@ import com.minor_project.optiserve_backend.operations.domain.ServiceWorkflow;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
@@ -24,6 +27,7 @@ import org.junit.jupiter.params.provider.ValueSource;
 
 class MlServiceDurationPredictorTests {
 
+    private static final ObjectMapper OBJECT_MAPPER = new ObjectMapper();
     private HttpServer server;
     private final AtomicInteger requests = new AtomicInteger();
     private volatile int responseStatus;
@@ -34,7 +38,7 @@ class MlServiceDurationPredictorTests {
     @BeforeEach
     void startStubServer() throws IOException {
         responseStatus = 200;
-        responseBody = "{\"predictedDurationMinutes\":87}";
+        responseBody = readContractFixture("response.json");
         delayMillis = 0;
         capturedRequestBody = "";
         requests.set(0);
@@ -69,25 +73,30 @@ class MlServiceDurationPredictorTests {
     }
 
     @Test
-    void postsFastApiContractAndParsesPredictionAsDuration() {
+    void postsSharedFastApiContractAndParsesSharedResponseFixture() throws Exception {
         ServiceStage stage = stage(2020, Instant.parse("2026-10-23T06:00:00Z"));
 
         assertThat(predictor.predict(stage)).isEqualTo(Duration.ofMinutes(87));
         assertThat(requests).hasValue(1);
+        assertThat(OBJECT_MAPPER.readTree(lastRequestBody()))
+                .isEqualTo(OBJECT_MAPPER.readTree(readContractFixture("request.json")));
     }
 
     @Test
-    void usesAppointmentDateForTheModelWeekdayInConfiguredServiceTimeZone() {
+    void usesAppointmentDateForTheModelWeekdayInConfiguredServiceTimeZone() throws Exception {
         ServiceStage stage = stage(2020, Instant.parse("2026-10-23T06:00:00Z"));
 
         predictor.predict(stage);
 
-        assertThat(lastRequestBody()).contains("\"serviceType\":\"Oil Change\"")
-                .contains("\"vehicleMake\":\"Toyota\"")
-                .contains("\"vehicleModel\":\"Corolla\"")
-                .contains("\"vehicleYear\":2020")
-                .contains("\"dayOfWeek\":\"FRIDAY\"")
-                .doesNotContain("vehicleAge", "priority", "waitingTime");
+        JsonNode request = OBJECT_MAPPER.readTree(lastRequestBody());
+        assertThat(request.get("serviceType").textValue()).isEqualTo("Oil Change");
+        assertThat(request.get("vehicleMake").textValue()).isEqualTo("Toyota");
+        assertThat(request.get("vehicleModel").textValue()).isEqualTo("Corolla");
+        assertThat(request.get("vehicleYear").intValue()).isEqualTo(2020);
+        assertThat(request.get("dayOfWeek").textValue()).isEqualTo("FRIDAY");
+        assertThat(request.has("vehicleAge")).isFalse();
+        assertThat(request.has("priority")).isFalse();
+        assertThat(request.has("waitingTime")).isFalse();
     }
 
     @Test
@@ -115,12 +124,31 @@ class MlServiceDurationPredictorTests {
     }
 
     @ParameterizedTest
-    @ValueSource(ints = {0, -1, 1441})
+    @ValueSource(ints = {0, -1, 4, 1441})
     void fallsBackForNonPositiveOrUnreasonablePredictions(int minutes) {
         responseBody = "{\"predictedDurationMinutes\":" + minutes + "}";
 
         assertThat(predictor.predict(stage(2020, Instant.parse("2026-10-23T06:00:00Z"))))
                 .isEqualTo(Duration.ofMinutes(35));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {5, 1440})
+    void acceptsConfiguredPredictionBoundaryValues(int minutes) {
+        responseBody = "{\"predictedDurationMinutes\":" + minutes + "}";
+
+        assertThat(predictor.predict(stage(2020, Instant.parse("2026-10-23T06:00:00Z"))))
+                .isEqualTo(Duration.ofMinutes(minutes));
+    }
+
+    @ParameterizedTest
+    @ValueSource(ints = {2008, 2026})
+    void sendsFastApiVehicleYearBoundaryValues(int year) throws Exception {
+        predictor.predict(stage(year, Instant.parse("2026-10-23T06:00:00Z")));
+
+        JsonNode body = OBJECT_MAPPER.readTree(lastRequestBody());
+        assertThat(body.get("vehicleYear").intValue()).isEqualTo(year);
+        assertThat(requests).hasValue(1);
     }
 
     @Test
@@ -152,6 +180,16 @@ class MlServiceDurationPredictorTests {
 
     private String lastRequestBody() {
         return capturedRequestBody;
+    }
+
+    private static String readContractFixture(String fileName) throws IOException {
+        String resource = "contracts/ml-duration-prediction/" + fileName;
+        try (InputStream input = MlServiceDurationPredictorTests.class.getClassLoader().getResourceAsStream(resource)) {
+            if (input == null) {
+                throw new IOException("Missing shared ML contract fixture: " + resource);
+            }
+            return new String(input.readAllBytes(), StandardCharsets.UTF_8).trim();
+        }
     }
 
     private volatile String capturedRequestBody = "";
