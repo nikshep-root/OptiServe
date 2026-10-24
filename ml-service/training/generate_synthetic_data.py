@@ -9,6 +9,7 @@ and re-run training/train.py — nothing else needs to change.
 Run: python training/generate_synthetic_data.py
 """
 
+import argparse
 import csv
 from pathlib import Path
 import random
@@ -19,7 +20,8 @@ sys.path.insert(0, str(REPO_ROOT))
 
 from app.features import DEFAULT_REFERENCE_YEAR, MAX_VEHICLE_YEAR, MIN_VEHICLE_YEAR
 
-random.seed(42)
+DEFAULT_RANDOM_SEED = 42
+DEFAULT_ROW_COUNT = 4000
 
 # Base duration (minutes) per service type — this is the dominant signal.
 SERVICE_TYPE_BASE_DURATION = {
@@ -59,12 +61,12 @@ DAY_LOAD_FACTOR = {
 }
 
 
-def sample_row():
-    service_type = random.choice(list(SERVICE_TYPE_BASE_DURATION.keys()))
-    make = random.choice(list(MAKE_MODELS.keys()))
-    model = random.choice(MAKE_MODELS[make])
-    year = random.randint(MIN_VEHICLE_YEAR, MAX_VEHICLE_YEAR)
-    day = random.choice(DAYS_OF_WEEK)
+def sample_row(rng: random.Random):
+    service_type = rng.choice(list(SERVICE_TYPE_BASE_DURATION.keys()))
+    make = rng.choice(list(MAKE_MODELS.keys()))
+    model = rng.choice(MAKE_MODELS[make])
+    year = rng.randint(MIN_VEHICLE_YEAR, MAX_VEHICLE_YEAR)
+    day = rng.choice(DAYS_OF_WEEK)
 
     base = SERVICE_TYPE_BASE_DURATION[service_type]
     vehicle_age = DEFAULT_REFERENCE_YEAR - year
@@ -76,7 +78,7 @@ def sample_row():
     day_factor = DAY_LOAD_FACTOR[day]
 
     # Gaussian noise to keep it realistic (not a perfectly learnable line).
-    noise = random.gauss(0, base * 0.10)
+    noise = rng.gauss(0, base * 0.10)
 
     duration = base * age_factor * day_factor + noise
     duration = max(10, round(duration))  # floor at 10 minutes
@@ -91,19 +93,29 @@ def sample_row():
     }
 
 
-def main(n_rows: int = 4000):
+def generate_rows(n_rows: int = DEFAULT_ROW_COUNT, seed: int = DEFAULT_RANDOM_SEED):
+    """Return a deterministic synthetic dataset for a given seed and size."""
+    rng = random.Random(seed)
+    return [sample_row(rng) for _ in range(n_rows)]
+
+
+def main(n_rows: int = DEFAULT_ROW_COUNT, seed: int = DEFAULT_RANDOM_SEED):
     out_path = Path(__file__).resolve().parent.parent / "data" / "service_history.csv"
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
-    rows = [sample_row() for _ in range(n_rows)]
+    rows = generate_rows(n_rows, seed)
 
     with out_path.open("w", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
 
-    print(f"Wrote {len(rows)} rows to {out_path}")
+    print(f"Wrote {len(rows)} synthetic rows to {out_path} (seed={seed})")
 
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--rows", type=int, default=DEFAULT_ROW_COUNT)
+    parser.add_argument("--seed", type=int, default=DEFAULT_RANDOM_SEED)
+    args = parser.parse_args()
+    main(n_rows=args.rows, seed=args.seed)

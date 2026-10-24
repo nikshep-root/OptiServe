@@ -37,14 +37,13 @@ Generation logic: a base duration per `serviceType`, adjusted by vehicle age
 (older vehicles take slightly longer) and day-of-week load (Fri/Sat/Sun busier),
 plus Gaussian noise so the relationship isn't perfectly linear.
 
-**Migration plan:** this is intentionally temporary. Once the Spring Boot
-backend has accumulated a meaningful volume of real `assignments` rows with
-`actual_service_duration` filled in, export that data into the same
-`serviceType,vehicleMake,vehicleModel,vehicleYear,dayOfWeek,durationMinutes`
-shape, drop it into `data/service_history.csv`, and re-run `training/train.py`.
-No code changes required — the schema and pipeline stay the same, only the
-source of the rows changes. Real usage data will give sharper, more accurate
-predictions than the synthetic approximation used for these first few months.
+**Limitations:** this data is synthetic and encodes the same assumptions used
+to generate its labels. Metrics from this dataset measure how well a model
+fits that simulator; they do **not** estimate real-world accuracy or prove
+that a deployed prediction is operationally reliable. Replace it with an
+approved, representative export of completed assignments before making any
+real-world accuracy claim. Check for data quality, leakage, and coverage
+before using such an export for training.
 
 ## 2. Feature engineering
 
@@ -59,36 +58,56 @@ shared by both training and inference so they can never drift apart:
 
 ## 3. Training
 
-```bash
-pip install -r requirements.txt
-python training/generate_synthetic_data.py   # (re)generate data/service_history.csv
-python training/train.py
+Use Python 3.11 or newer and a clean virtual environment. The scikit-learn,
+NumPy, SciPy, joblib, threadpoolctl, and pandas versions are pinned in
+`requirements.txt`. The scikit-learn pin matches the version embedded in the
+committed artifact; joblib is pinned to a newer release to avoid the NumPy
+array-shape deprecation emitted by the former joblib 1.4.2 loader with NumPy
+2.5.
+
+```powershell
+cd ml-service
+py -3.11 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe training\generate_synthetic_data.py --rows 4000 --seed 42
+.\.venv\Scripts\python.exe training\train.py
 ```
+
+The generator and trainer both use seed `42` by default. Regenerating the CSV
+overwrites the checked-in synthetic dataset, so review that data diff before
+keeping it. `train.py` creates `model/candidates/service_duration_model.joblib`
+and `model/candidates/metrics.json`; it refuses to write to the deployed
+artifact path `model/service_duration_model.joblib`.
 
 `train.py`:
 1. Loads `data/service_history.csv`.
 2. Builds features via `app/features.py`.
-3. 80/20 train/validation split (`random_state=42` for reproducibility).
+3. Deterministic 70/15/15 train/validation/test split (seed `42`).
 4. Trains two pipelines (preprocessing + model), each wrapped in a single
    sklearn `Pipeline` so preprocessing and the model are always persisted
    and loaded together:
    - **Linear Regression** (baseline)
-   - **Random Forest Regressor** (200 trees)
-5. Evaluates both on the validation split with MAE, RMSE, and R².
-6. Selects the model with the **lower validation MAE**.
-7. Refits the selected pipeline on the full labeled dataset.
-8. Persists the winner and its fixed `reference_year` to
-   `model/service_duration_model.joblib` via `joblib`.
-9. Writes both models' validation metrics to `model/metrics.json` for reference.
+   - **Random Forest Regressor** (200 trees, single worker)
+5. Evaluates both candidates on validation data and selects the lower MAE.
+6. Refits the selected pipeline on train plus validation data.
+7. Evaluates it once on the untouched test partition. The report includes
+   MAE (average absolute error, in minutes), RMSE (penalizes larger errors,
+   in minutes), and R².
+8. Writes the candidate artifact and `metrics.json` only under
+   `model/candidates/`, including dataset SHA-256, split sizes, seed, and
+   Python/NumPy/pandas/scikit-learn versions. Candidate files are ignored by
+   Git. Review the candidate and metrics before any separate deployment-artifact
+   replacement decision.
+
+The existing `model/metrics.json` contains older validation-only results and
+is not a held-out test report. It must not be presented as real-world accuracy.
 
 ## 4. Evaluation
 
-`training/evaluate.py` holds the shared `evaluate_model()` used by `train.py`,
-and can also be run standalone as a sanity check against the persisted model:
-
-```bash
-python training/evaluate.py
-```
+`training/evaluate.py` holds the shared metric helpers used by `train.py`.
+Run `python training/train.py` to generate the reproducible held-out report at
+`model/candidates/metrics.json`. Do not evaluate a model trained on the full
+dataset against that same dataset and call it a held-out result.
 
 Metrics reported: **MAE** (mean absolute error, minutes), **RMSE** (root mean
 squared error, minutes), **R²** (variance explained).
@@ -150,6 +169,12 @@ pytest tests/ -v
   supported `vehicleYear` range acceptance (2008–2026) and boundary rejections (HTTP 422),
   positive integer predictions, deterministic outputs, invalid field handling,
   and graceful unseen categorical values.
+- `tests/test_model_artifact.py` loads the actual committed joblib artifact,
+  rejects scikit-learn version and NumPy shape deprecation warnings, and makes
+  a representative prediction. It is separate from tests that stub the API
+  prediction function.
+- `tests/test_training_reproducibility.py` verifies seeded synthetic data and
+  deterministic, disjoint 70/15/15 splits.
 
 ### Cross-service contract regression
 
