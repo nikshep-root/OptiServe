@@ -2,6 +2,8 @@ package com.minor_project.optiserve_backend.operations.assignment.api;
 
 import com.minor_project.optiserve_backend.operations.domain.AssignmentStatus;
 import com.minor_project.optiserve_backend.operations.domain.PriorityClass;
+import com.minor_project.optiserve_backend.operations.domain.ServiceDurationPredictionSource;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -16,5 +18,8 @@ public record AssignmentSummaryResponse(
         AssignmentStatus assignmentStatus,
         Instant assignedAt,
         Instant startedAt,
-        Instant completedAt) {
+        Instant completedAt,
+        Duration predictedServiceDuration,
+        Duration actualServiceDuration,
+        ServiceDurationPredictionSource predictionSource) {
 }

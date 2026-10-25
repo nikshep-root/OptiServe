@@ -11,11 +11,13 @@ import com.minor_project.optiserve_backend.common.api.ResourceNotFoundException;
 import com.minor_project.optiserve_backend.operations.domain.PriorityClass;
 import com.minor_project.optiserve_backend.operations.domain.ServiceRequest;
 import com.minor_project.optiserve_backend.operations.domain.ServiceStageStatus;
+import com.minor_project.optiserve_backend.operations.domain.ServiceDurationPredictionSource;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.ServiceWorkflow;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
 import com.minor_project.optiserve_backend.operations.duration.application.DefaultServiceDurationPredictor;
 import com.minor_project.optiserve_backend.operations.duration.application.ServiceDurationPredictor;
+import com.minor_project.optiserve_backend.operations.duration.application.ServiceDurationPrediction;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceRequestRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceTypeRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceWorkflowRepository;
@@ -53,8 +55,10 @@ class ServiceRequestApplicationServiceTests {
         when(serviceTypeRepository.findById(repairId)).thenReturn(Optional.of(repair));
         when(serviceRequestRepository.save(any(ServiceRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(serviceWorkflowRepository.save(any(ServiceWorkflow.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(serviceDurationPredictor.predict(any()))
-                .thenReturn(Duration.ofMinutes(21), Duration.ofMinutes(42));
+        when(serviceDurationPredictor.predictWithProvenance(any()))
+                .thenReturn(
+                        new ServiceDurationPrediction(Duration.ofMinutes(21), ServiceDurationPredictionSource.ML_MODEL),
+                        new ServiceDurationPrediction(Duration.ofMinutes(42), ServiceDurationPredictionSource.ML_MODEL));
 
         service().create(new CreateServiceRequestRequest(
                 vehicleId, PriorityClass.URGENT, null, List.of(inspectionId, repairId)));
@@ -73,6 +77,9 @@ class ServiceRequestApplicationServiceTests {
         assertThat(workflowCaptor.getValue().getStages())
                 .extracting(stage -> stage.getPredictedServiceDuration())
                 .containsExactly(Duration.ofMinutes(21), Duration.ofMinutes(42));
+        assertThat(workflowCaptor.getValue().getStages())
+                .extracting(stage -> stage.getPredictionSource())
+                .containsExactly(ServiceDurationPredictionSource.ML_MODEL, ServiceDurationPredictionSource.ML_MODEL);
     }
 
     @Test
@@ -84,7 +91,7 @@ class ServiceRequestApplicationServiceTests {
         when(serviceTypeRepository.findById(serviceTypeId)).thenReturn(Optional.of(serviceType));
         when(serviceRequestRepository.save(any(ServiceRequest.class))).thenAnswer(invocation -> invocation.getArgument(0));
         when(serviceWorkflowRepository.save(any(ServiceWorkflow.class))).thenAnswer(invocation -> invocation.getArgument(0));
-        when(serviceDurationPredictor.predict(any())).thenThrow(new IllegalStateException("client failure"));
+        when(serviceDurationPredictor.predictWithProvenance(any())).thenThrow(new IllegalStateException("client failure"));
 
         service().create(new CreateServiceRequestRequest(vehicleId, PriorityClass.NORMAL, null, List.of(serviceTypeId)));
 
@@ -92,6 +99,8 @@ class ServiceRequestApplicationServiceTests {
         verify(serviceWorkflowRepository).save(workflowCaptor.capture());
         assertThat(workflowCaptor.getValue().getStages().getFirst().getPredictedServiceDuration())
                 .isEqualTo(serviceType.getDefaultServiceDuration());
+        assertThat(workflowCaptor.getValue().getStages().getFirst().getPredictionSource())
+                .isEqualTo(ServiceDurationPredictionSource.DEFAULT_FALLBACK);
     }
 
     @Test

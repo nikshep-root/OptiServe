@@ -1,6 +1,8 @@
 package com.minor_project.optiserve_backend.operations.servicerequest.api;
 
 import com.minor_project.optiserve_backend.operations.domain.ServiceStageStatus;
+import com.minor_project.optiserve_backend.operations.domain.ServiceDurationPredictionSource;
+import java.time.Duration;
 import java.util.UUID;
 
 public record ServiceRequestStageResponse(
@@ -8,5 +10,7 @@ public record ServiceRequestStageResponse(
         int sequenceNumber,
         UUID serviceTypeId,
         String serviceTypeName,
-        ServiceStageStatus status) {
+        ServiceStageStatus status,
+        Duration predictedServiceDuration,
+        ServiceDurationPredictionSource predictionSource) {
 }

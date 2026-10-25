@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import com.minor_project.optiserve_backend.operations.domain.PriorityClass;
 import com.minor_project.optiserve_backend.operations.domain.ServiceRequest;
 import com.minor_project.optiserve_backend.operations.domain.ServiceStage;
+import com.minor_project.optiserve_backend.operations.domain.ServiceDurationPredictionSource;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.ServiceWorkflow;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
@@ -21,6 +22,8 @@ class DefaultServiceDurationPredictorTests {
         ServiceStage stage = stageWithDefaultDuration(Duration.ofMinutes(45));
 
         assertThat(predictor.predict(stage)).isEqualTo(Duration.ofMinutes(45));
+        assertThat(predictor.predictWithProvenance(stage).source())
+                .isEqualTo(ServiceDurationPredictionSource.DEFAULT_FALLBACK);
     }
 
     @Test

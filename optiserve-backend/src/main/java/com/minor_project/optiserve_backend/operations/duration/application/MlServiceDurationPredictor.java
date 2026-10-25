@@ -1,6 +1,7 @@
 package com.minor_project.optiserve_backend.operations.duration.application;
 
 import com.minor_project.optiserve_backend.operations.domain.ServiceRequest;
+import com.minor_project.optiserve_backend.operations.domain.ServiceDurationPredictionSource;
 import com.minor_project.optiserve_backend.operations.domain.ServiceStage;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
@@ -79,6 +80,11 @@ public class MlServiceDurationPredictor implements ServiceDurationPredictor {
 
     @Override
     public Duration predict(ServiceStage serviceStage) {
+        return predictWithProvenance(serviceStage).duration();
+    }
+
+    @Override
+    public ServiceDurationPrediction predictWithProvenance(ServiceStage serviceStage) {
         Objects.requireNonNull(serviceStage, "serviceStage must not be null");
         MlPredictionRequest request = toRequest(serviceStage);
         if (request == null) {
@@ -105,7 +111,8 @@ public class MlServiceDurationPredictor implements ServiceDurationPredictor {
                 return fallback(serviceStage);
             }
             successfulPredictions.increment();
-            return Duration.ofMinutes(minutes);
+            return new ServiceDurationPrediction(
+                    Duration.ofMinutes(minutes), ServiceDurationPredictionSource.ML_MODEL);
         } catch (RestClientException exception) {
             if (isTimeout(exception)) {
                 predictionTimeouts.increment();
@@ -118,9 +125,10 @@ public class MlServiceDurationPredictor implements ServiceDurationPredictor {
         }
     }
 
-    private Duration fallback(ServiceStage serviceStage) {
+    private ServiceDurationPrediction fallback(ServiceStage serviceStage) {
         fallbackUses.increment();
-        return defaultPredictor.predict(serviceStage);
+        return new ServiceDurationPrediction(
+                defaultPredictor.predict(serviceStage), ServiceDurationPredictionSource.DEFAULT_FALLBACK);
     }
 
     private static boolean isTimeout(Throwable exception) {

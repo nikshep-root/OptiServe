@@ -72,8 +72,12 @@ class ServiceRequestControllerIntegrationTests {
                 .andExpect(jsonPath("$.workflowStatus").value("ACTIVE"))
                 .andExpect(jsonPath("$.stages[0].sequenceNumber").value(1))
                 .andExpect(jsonPath("$.stages[0].status").value("ELIGIBLE"))
+                .andExpect(jsonPath("$.stages[0].predictedServiceDuration").exists())
+                .andExpect(jsonPath("$.stages[0].predictionSource").value("DEFAULT_FALLBACK"))
                 .andExpect(jsonPath("$.stages[1].sequenceNumber").value(2))
                 .andExpect(jsonPath("$.stages[1].status").value("PENDING"))
+                .andExpect(jsonPath("$.stages[1].predictedServiceDuration").exists())
+                .andExpect(jsonPath("$.stages[1].predictionSource").value("DEFAULT_FALLBACK"))
                 .andExpect(jsonPath("$.stages[2].sequenceNumber").value(3))
                 .andExpect(jsonPath("$.stages[2].serviceTypeId").value(inspection.getId().toString()))
                 .andExpect(jsonPath("$.stages[2].status").value("PENDING"));

@@ -47,6 +47,10 @@ public class ServiceStage {
     @Column(name = "predicted_service_duration", precision = 21, scale = 0)
     private Duration predictedServiceDuration;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "prediction_source", nullable = false, length = 32)
+    private ServiceDurationPredictionSource predictionSource;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt;
 
@@ -72,6 +76,7 @@ public class ServiceStage {
             throw new IllegalArgumentException("predictedServiceDuration must be positive when provided");
         }
         this.predictedServiceDuration = predictedServiceDuration;
+        this.predictionSource = ServiceDurationPredictionSource.LEGACY_UNKNOWN;
         this.status = ServiceStageStatus.PENDING;
         this.createdAt = Instant.now();
         this.updatedAt = createdAt;
@@ -151,7 +156,16 @@ public class ServiceStage {
         return predictedServiceDuration;
     }
 
+    public ServiceDurationPredictionSource getPredictionSource() {
+        return predictionSource;
+    }
+
     public void updatePredictedServiceDuration(Duration predictedServiceDuration) {
+        updatePredictedServiceDuration(predictedServiceDuration, ServiceDurationPredictionSource.LEGACY_UNKNOWN);
+    }
+
+    public void updatePredictedServiceDuration(
+            Duration predictedServiceDuration, ServiceDurationPredictionSource predictionSource) {
         if (status != ServiceStageStatus.PENDING
                 && status != ServiceStageStatus.ELIGIBLE
                 && status != ServiceStageStatus.QUEUED) {
@@ -162,6 +176,7 @@ public class ServiceStage {
             throw new IllegalArgumentException("predictedServiceDuration must be positive");
         }
         this.predictedServiceDuration = predictedServiceDuration;
+        this.predictionSource = Objects.requireNonNull(predictionSource, "predictionSource must not be null");
         updatedAt = Instant.now();
     }
 

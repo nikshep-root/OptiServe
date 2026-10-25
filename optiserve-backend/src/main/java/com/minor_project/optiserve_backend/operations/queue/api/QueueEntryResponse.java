@@ -3,6 +3,8 @@ package com.minor_project.optiserve_backend.operations.queue.api;
 import com.minor_project.optiserve_backend.operations.domain.PriorityClass;
 import com.minor_project.optiserve_backend.operations.domain.QueueEntryStatus;
 import com.minor_project.optiserve_backend.operations.domain.ServiceStageStatus;
+import com.minor_project.optiserve_backend.operations.domain.ServiceDurationPredictionSource;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -18,5 +20,7 @@ public record QueueEntryResponse(
         PriorityClass priority,
         Instant queueEntryTime,
         QueueEntryStatus status,
-        ServiceStageStatus stageStatus) {
+        ServiceStageStatus stageStatus,
+        Duration predictedServiceDuration,
+        ServiceDurationPredictionSource predictionSource) {
 }

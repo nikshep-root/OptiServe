@@ -1548,13 +1548,22 @@ tbody tr[hidden] {
 }
 .stage-list {
   display:flex;
-  gap:4px
+  gap:4px;
+  flex-wrap:wrap
 }
 .stage-pill {
+  display:block;
   padding:4px 5px;
   border:1px solid #3a4037;
   color:#c3c9ba;
   font-size:8px
+}
+.stage-estimate {
+  display:block;
+  margin-top:5px;
+  color:#aab18e;
+  font:400 7px var(--mono);
+  line-height:1.5
 }
 .stage-pill i {
   margin-left:4px;
@@ -1628,6 +1637,13 @@ tbody tr[hidden] {
   margin-top:3px;
   font-size:9px;
   color:#858b80
+}
+.queue-duration {
+  display:block;
+  margin-top:5px;
+  color:#aab18e;
+  font:400 7px var(--mono);
+  line-height:1.5
 }
 .queue-status {
   display:flex;
@@ -1955,6 +1971,18 @@ tbody tr[hidden] {
 }
 .assignment-controls {
   min-width:170px
+}
+.duration-comparison {
+  display:grid;
+  gap:4px;
+  min-width:112px;
+  line-height:1.4;
+  color:#c3c9ba;
+  font-size:9px
+}
+.duration-comparison small {
+  color:#aab18e;
+  font:400 7px var(--mono)
 }
 .assignment-action-error {
   max-width:230px;
