@@ -199,6 +199,8 @@ ServiceDurationPredictor
 
 The backend calls the separately runnable FastAPI service when its URL is configured. Connection and response timeouts bound the call; unavailable, invalid, unsupported, and error responses use the configured `ServiceType` default duration.
 
+Production health endpoints, admin-only ML counters, Render verification, and troubleshooting are documented in [OPERATIONS.md](OPERATIONS.md).
+
 ## Application Cache Policy
 
 Spring's local Caffeine cache stores service-type list and by-ID responses, plus each resource's compatible service-type projection. These reads are relatively stable and avoid repeating the same configuration queries. Each cache is bounded to 1,000 entries and entries expire after ten minutes as a safety net.

@@ -44,9 +44,8 @@ def test_ready_returns_503_when_model_is_unavailable(monkeypatch, tmp_path):
     try:
         response = client.get("/ready")
         assert response.status_code == 503
-        body = response.json()
-        assert "detail" in body
-        assert "No trained model found" in body["detail"]
+        assert response.json() == {"detail": "Prediction model is unavailable."}
+        assert str(tmp_path) not in response.text
     finally:
         get_model_artifact.cache_clear()
 
@@ -59,8 +58,8 @@ def test_ready_returns_503_when_model_is_corrupt(monkeypatch, tmp_path):
     try:
         response = client.get("/ready")
         assert response.status_code == 503
-        body = response.json()
-        assert "Failed to load model" in body["detail"]
+        assert response.json() == {"detail": "Prediction model is unavailable."}
+        assert str(tmp_path) not in response.text
     finally:
         get_model_artifact.cache_clear()
 
@@ -71,9 +70,8 @@ def test_predict_duration_returns_503_when_model_is_unavailable(monkeypatch, tmp
     try:
         response = client.post("/predict-duration", json=VALID_PAYLOAD)
         assert response.status_code == 503
-        body = response.json()
-        assert "detail" in body
-        assert "No trained model found" in body["detail"]
+        assert response.json() == {"detail": "Prediction model is unavailable."}
+        assert str(tmp_path) not in response.text
     finally:
         get_model_artifact.cache_clear()
 

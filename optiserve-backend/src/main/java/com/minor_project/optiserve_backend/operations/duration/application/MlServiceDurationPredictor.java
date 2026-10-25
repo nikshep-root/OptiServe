@@ -4,10 +4,15 @@ import com.minor_project.optiserve_backend.operations.domain.ServiceRequest;
 import com.minor_project.optiserve_backend.operations.domain.ServiceStage;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
+import io.micrometer.core.instrument.Counter;
+import io.micrometer.core.instrument.MeterRegistry;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
+import java.net.SocketTimeoutException;
+import java.net.http.HttpTimeoutException;
 import java.util.Objects;
+import java.util.concurrent.TimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -22,6 +27,11 @@ import org.springframework.web.client.RestClientException;
 @Primary
 public class MlServiceDurationPredictor implements ServiceDurationPredictor {
 
+    static final String SUCCESS_METRIC = "optiserve.ml.predictions.success";
+    static final String TIMEOUT_METRIC = "optiserve.ml.predictions.timeout";
+    static final String ERROR_METRIC = "optiserve.ml.predictions.error";
+    static final String FALLBACK_METRIC = "optiserve.ml.predictions.fallback";
+
     static final int MIN_SUPPORTED_VEHICLE_YEAR = 2008;
     static final int MAX_SUPPORTED_VEHICLE_YEAR = 2026;
     private static final Logger LOGGER = LoggerFactory.getLogger(MlServiceDurationPredictor.class);
@@ -31,9 +41,14 @@ public class MlServiceDurationPredictor implements ServiceDurationPredictor {
     private final ZoneId serviceTimeZone;
     private final int minimumPredictionMinutes;
     private final int maximumPredictionMinutes;
+    private final Counter successfulPredictions;
+    private final Counter predictionTimeouts;
+    private final Counter predictionErrors;
+    private final Counter fallbackUses;
 
     public MlServiceDurationPredictor(
             DefaultServiceDurationPredictor defaultPredictor,
+            MeterRegistry meterRegistry,
             @Value("${optiserve.ml.base-url:http://localhost:8000}") String baseUrl,
             @Value("${optiserve.ml.connect-timeout:250ms}") Duration connectTimeout,
             @Value("${optiserve.ml.response-timeout:1s}") Duration responseTimeout,
@@ -41,6 +56,11 @@ public class MlServiceDurationPredictor implements ServiceDurationPredictor {
             @Value("${optiserve.ml.minimum-duration-minutes:5}") int minimumPredictionMinutes,
             @Value("${optiserve.ml.maximum-duration-minutes:1440}") int maximumPredictionMinutes) {
         this.defaultPredictor = Objects.requireNonNull(defaultPredictor, "defaultPredictor must not be null");
+        Objects.requireNonNull(meterRegistry, "meterRegistry must not be null");
+        this.successfulPredictions = meterRegistry.counter(SUCCESS_METRIC);
+        this.predictionTimeouts = meterRegistry.counter(TIMEOUT_METRIC);
+        this.predictionErrors = meterRegistry.counter(ERROR_METRIC);
+        this.fallbackUses = meterRegistry.counter(FALLBACK_METRIC);
         this.serviceTimeZone = ZoneId.of(serviceTimeZone);
         if (minimumPredictionMinutes <= 0 || maximumPredictionMinutes < minimumPredictionMinutes) {
             throw new IllegalArgumentException("ML duration bounds must be positive and ordered");
@@ -62,7 +82,7 @@ public class MlServiceDurationPredictor implements ServiceDurationPredictor {
         Objects.requireNonNull(serviceStage, "serviceStage must not be null");
         MlPredictionRequest request = toRequest(serviceStage);
         if (request == null) {
-            return defaultPredictor.predict(serviceStage);
+            return fallback(serviceStage);
         }
 
         try {
@@ -81,14 +101,37 @@ public class MlServiceDurationPredictor implements ServiceDurationPredictor {
             }
             if (minutes == null || minutes < minimumPredictionMinutes || minutes > maximumPredictionMinutes) {
                 LOGGER.warn("ML duration response was invalid; using the service type default duration");
-                return defaultPredictor.predict(serviceStage);
+                predictionErrors.increment();
+                return fallback(serviceStage);
             }
+            successfulPredictions.increment();
             return Duration.ofMinutes(minutes);
         } catch (RestClientException exception) {
+            if (isTimeout(exception)) {
+                predictionTimeouts.increment();
+            } else {
+                predictionErrors.increment();
+            }
             LOGGER.warn("ML duration service failed; using the service type default duration ({})",
                     exception.getClass().getSimpleName());
-            return defaultPredictor.predict(serviceStage);
+            return fallback(serviceStage);
         }
+    }
+
+    private Duration fallback(ServiceStage serviceStage) {
+        fallbackUses.increment();
+        return defaultPredictor.predict(serviceStage);
+    }
+
+    private static boolean isTimeout(Throwable exception) {
+        for (Throwable cause = exception; cause != null; cause = cause.getCause()) {
+            if (cause instanceof SocketTimeoutException
+                    || cause instanceof HttpTimeoutException
+                    || cause instanceof TimeoutException) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private MlPredictionRequest toRequest(ServiceStage stage) {
