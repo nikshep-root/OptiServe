@@ -97,6 +97,8 @@ public class QueueApplicationService {
                 queueEntry.getServiceRequest().getPriorityClass(),
                 queueEntry.getQueuedAt(),
                 queueEntry.getStatus(),
-                stage.getStatus());
+                stage.getStatus(),
+                stage.getPredictedServiceDuration(),
+                stage.getPredictionSource());
     }
 }

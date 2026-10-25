@@ -39,6 +39,32 @@ function duration(seconds) {
   return minutes < 60 ? `${minutes} min` : `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
 }
 
+function durationSeconds(isoDuration) {
+  if (typeof isoDuration !== "string") return null;
+  const match = isoDuration.match(/^PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/);
+  if (!match) return null;
+  return Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0);
+}
+
+function serviceDurationLabel(isoDuration) {
+  const seconds = durationSeconds(isoDuration);
+  return seconds === null ? null : duration(seconds);
+}
+
+function predictionSourceLabel(source) {
+  if (source === "ML_MODEL") return "ML model";
+  if (source === "DEFAULT_FALLBACK") return "service type default";
+  return "source not recorded";
+}
+
+function stageEstimate(item, admin) {
+  const estimate = serviceDurationLabel(item.predictedServiceDuration);
+  if (!estimate) return "";
+  return '<small class="stage-estimate">Estimate · ' + escapeHtml(estimate)
+    + (admin ? " · " + escapeHtml(predictionSourceLabel(item.predictionSource)) : "")
+    + "</small>";
+}
+
 async function api(path, options = {}) {
   const token = sessionStorage.getItem(TOKEN_KEY);
   let response;
@@ -497,11 +523,39 @@ function vehiclesPage() {
 
 function assignmentsPanel() {
   if (dashboardData.errors.assignments) return errorPanel("Assignments unavailable", dashboardData.errors.assignments.message);
-  if (!dashboardData.assignments.length) return `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE / ASSIGNMENTS</span><h2>Assignment history</h2></div></div><div class="empty-inline"><span>${icon("check", 18)}</span><div><strong>No assignments yet</strong><p>Assignments for your service requests will appear here.</p></div></div></section>`;
+  if (!dashboardData.assignments.length) return '<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE / ASSIGNMENTS</span><h2>Assignment history</h2></div></div><div class="empty-inline"><span>' + icon("check", 18) + '</span><div><strong>No assignments yet</strong><p>Assignments for your service requests will appear here.</p></div></div></section>';
   const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
-  return `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE / ASSIGNMENTS</span><h2>Assignment history</h2><p>Assignment state is refreshed from the backend.</p></div></div><div class="table-wrap"><table><thead><tr><th>VEHICLE</th><th>SERVICE</th><th>RESOURCE</th><th>STATUS</th><th>ASSIGNED</th>${admin ? "<th>ACTIONS</th>" : ""}</tr></thead><tbody>${dashboardData.assignments.map((item) => `<tr><td>${escapeHtml(item.vehicleRegistrationNumber)}</td><td>${escapeHtml(item.serviceTypeName)}</td><td>${escapeHtml(item.resourceName)}</td><td><span class="status-tag status-${String(item.assignmentStatus).toLowerCase()}">${escapeHtml(item.assignmentStatus.replaceAll("_", " "))}</span></td><td>${escapeHtml(formatDate(item.assignedAt))}</td>${admin ? `<td>${assignmentControls(item)}</td>` : ""}</tr>`).join("")}</tbody></table></div></section>`;
+  const rows = dashboardData.assignments.map((item) => "<tr><td>" + escapeHtml(item.vehicleRegistrationNumber)
+    + "</td><td>" + escapeHtml(item.serviceTypeName) + "</td><td>" + escapeHtml(item.resourceName) + "</td>"
+    + '<td><span class="status-tag status-' + escapeHtml(String(item.assignmentStatus).toLowerCase()) + '">'
+    + escapeHtml(item.assignmentStatus.replaceAll("_", " ")) + "</span></td><td>"
+    + assignmentDurationSummary(item, admin) + "</td><td>" + escapeHtml(formatDate(item.assignedAt)) + "</td>"
+    + (admin ? "<td>" + assignmentControls(item) + "</td>" : "") + "</tr>").join("");
+  return '<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE / ASSIGNMENTS</span><h2>Assignment history</h2>'
+    + '<p>Assignment state is refreshed from the backend. Actual duration appears after completion.</p></div></div>'
+    + '<div class="table-wrap"><table><thead><tr><th>VEHICLE</th><th>SERVICE</th><th>RESOURCE</th><th>STATUS</th><th>DURATION</th><th>ASSIGNED</th>'
+    + (admin ? "<th>ACTIONS</th>" : "") + "</tr></thead><tbody>" + rows + "</tbody></table></div></section>";
 }
 
+function assignmentDurationSummary(item, admin) {
+  const predicted = serviceDurationLabel(item.predictedServiceDuration);
+  const actual = serviceDurationLabel(item.actualServiceDuration);
+  const comparison = predicted && actual ? durationDifference(item.predictedServiceDuration, item.actualServiceDuration) : "";
+  const source = admin && predicted ? "<small>" + escapeHtml(predictionSourceLabel(item.predictionSource)) + "</small>" : "";
+  return '<span class="duration-comparison">'
+    + (predicted ? "<span>Estimate · " + escapeHtml(predicted) + "</span>" : "<span>Estimate unavailable</span>")
+    + (actual ? "<span>Actual · " + escapeHtml(actual) + "</span>" : "")
+    + (comparison ? "<small>" + escapeHtml(comparison) + "</small>" : "") + source + "</span>";
+}
+
+function durationDifference(predictedIso, actualIso) {
+  const predicted = durationSeconds(predictedIso);
+  const actual = durationSeconds(actualIso);
+  if (predicted === null || actual === null) return "";
+  const difference = Math.round(Math.abs(actual - predicted) / 60);
+  return actual > predicted ? difference + " min over estimate"
+    : actual < predicted ? difference + " min under estimate" : "On estimate";
+}
 const assignmentActionsInFlight = new Set();
 const assignmentActionErrors = new Map();
 const assignmentDurationDrafts = new Map();
@@ -553,34 +607,64 @@ function analyticsPage() {
   return `${header}<div class="analytics-metrics"><article class="analytics-metric"><span>REQUESTS CREATED</span><strong>${historical.requestsCreated}</strong><small>Requested during the selected period</small></article><article class="analytics-metric"><span>REQUESTS COMPLETED</span><strong>${historical.requestsCompleted}</strong><small>Final workflow stage completed in period</small></article><article class="analytics-metric"><span>AVG ACTUAL DURATION</span><strong>${historical.averageActualServiceDurationMinutes == null ? "—" : `${Number(historical.averageActualServiceDurationMinutes).toFixed(1)}<i>min</i>`}</strong><small>Completed assignments with recorded actual duration</small></article><article class="analytics-metric"><span>PREDICTION ERROR · MAE</span><strong>${historical.meanAbsolutePredictionErrorMinutes == null ? "—" : `${Number(historical.meanAbsolutePredictionErrorMinutes).toFixed(1)}<i>min</i>`}</strong><small>Mean absolute error · ${historical.predictionErrorSampleCount} samples</small></article></div><div class="analytics-live" role="region" aria-label="Current workshop state"><div><span>WAITING QUEUE</span><strong>${current.waitingQueueSize}</strong></div><div><span>ACTIVE ASSIGNMENTS</span><strong>${current.activeAssignments}</strong></div><div><span>AVAILABLE RESOURCES</span><strong>${current.availableResources}</strong></div><div><span>BUSY RESOURCES</span><strong>${current.busyResources}</strong></div><div><span>OFFLINE RESOURCES</span><strong>${current.offlineResources}</strong></div><small>Live snapshot · not filtered by date range</small></div><section class="analytics-trend-panel"><div class="analytics-section-heading"><div><span class="panel-kicker">COMPLETION / DAILY</span><h3>Completed service requests</h3></div><span>Requests completed per UTC day</span></div>${analytics.completionTrend.every((point) => point.completedRequests === 0) ? `<div class="empty-state analytics-empty"><h3>No completions in this period</h3><p>Completed requests will appear here when their final workflow stage is completed.</p></div>` : `<div class="analytics-trend-scroll"><div class="analytics-trend" style="--trend-days:${analytics.completionTrend.length}" role="list" aria-label="Daily completed service requests from ${escapeHtml(analyticsRange.from)} through ${escapeHtml(analyticsRange.to)}">${trend}</div></div>`}</section></section>`;
 }
 
-function requestRow(request, typesById) {
+function requestRow(request) {
   const stage = request.stages?.[0];
-  const type = typesById.get(stage?.serviceTypeId);
-  const progress = request.stages?.map((item) => `<span class="stage-pill stage-${String(item.status).toLowerCase()}">${escapeHtml(item.serviceTypeName)} <i>${escapeHtml(item.status.replaceAll("_", " "))}</i>${item.status === "ELIGIBLE" ? ` <button class="stage-queue-action" data-action="queue-stage" data-stage="${item.id}">Queue</button>` : ""}</span>`).join("") || "—";
-  return `<tr data-status="${escapeHtml(request.status)}" data-search="${escapeHtml(`${request.vehicleRegistrationNumber} ${stage?.serviceTypeName || ""} ${request.status} ${request.priority}`.toLowerCase())}"><td><span class="table-primary">${escapeHtml(request.vehicleRegistrationNumber)}</span><span class="table-secondary">${escapeHtml(request.id.slice(0, 8).toUpperCase())}</span></td><td><span class="table-primary">${escapeHtml(stage?.serviceTypeName || "Service request")}</span><span class="table-secondary">${type ? `Standard duration · ${duration(type.defaultServiceDurationSeconds)}` : "Duration not provided"}</span></td><td><div class="stage-list">${progress}</div></td><td><span class="status-tag status-${String(request.status).toLowerCase()}">${escapeHtml(request.status.replaceAll("_", " "))}</span></td><td><span class="priority-text">${escapeHtml(request.priority)}</span></td><td>${escapeHtml(formatDate(request.appointmentTime))}</td></tr>`;
+  const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
+  const progress = request.stages?.map((item) => '<span class="stage-pill stage-' + escapeHtml(String(item.status).toLowerCase()) + '"><span>'
+    + escapeHtml(item.serviceTypeName) + ' <i>' + escapeHtml(item.status.replaceAll("_", " ")) + "</i></span>"
+    + stageEstimate(item, admin)
+    + (item.status === "ELIGIBLE" ? ' <button class="stage-queue-action" data-action="queue-stage" data-stage="' + escapeHtml(item.id) + '">Queue</button>' : "")
+    + "</span>").join("") || "—";
+  return '<tr data-status="' + escapeHtml(request.status) + '" data-search="'
+    + escapeHtml((request.vehicleRegistrationNumber + " " + (stage?.serviceTypeName || "") + " " + request.status + " " + request.priority).toLowerCase())
+    + '"><td><span class="table-primary">' + escapeHtml(request.vehicleRegistrationNumber)
+    + '</span><span class="table-secondary">' + escapeHtml(request.id.slice(0, 8).toUpperCase())
+    + '</span></td><td><span class="table-primary">' + escapeHtml(stage?.serviceTypeName || "Service request")
+    + '</span><span class="table-secondary">' + (request.stages?.length || 0) + " workflow stage"
+    + (request.stages?.length === 1 ? "" : "s") + '</span></td><td><div class="stage-list">' + progress
+    + '</div></td><td><span class="status-tag status-' + escapeHtml(String(request.status).toLowerCase()) + '">'
+    + escapeHtml(request.status.replaceAll("_", " ")) + '</span></td><td><span class="priority-text">'
+    + escapeHtml(request.priority) + '</span></td><td>' + escapeHtml(formatDate(request.appointmentTime)) + "</td></tr>";
 }
 
 function requestTable() {
-  const typesById = new Map(dashboardData.serviceTypes.map((type) => [type.id, type]));
   const customerAccount = sessionStorage.getItem(ROLE_KEY) !== "ADMIN";
   if (dashboardData.errors.requests) return errorPanel("Service requests could not be loaded", dashboardData.errors.requests.message);
-  if (!dashboardData.requests.length) return `<div class="empty-state"><div class="empty-icon">${icon("layers", 20)}</div><h3>No service requests yet</h3><p>Requests from the existing OPTISERVE API will appear here once created.</p>${customerAccount ? `<button class="button button-outline" data-action="new-request">Create a request ${icon("arrow", 15)}</button>` : ""}</div>`;
-  return `<div class="table-wrap"><table><thead><tr><th>VEHICLE</th><th>SERVICE</th><th>WORKFLOW STAGES</th><th>STATUS</th><th>PRIORITY</th><th>APPOINTMENT</th></tr></thead><tbody>${dashboardData.requests.map((request) => requestRow(request, typesById)).join("")}</tbody></table></div>`;
+  if (!dashboardData.requests.length) return '<div class="empty-state"><div class="empty-icon">' + icon("layers", 20)
+    + '</div><h3>No service requests yet</h3><p>Requests from the existing OPTISERVE API will appear here once created.</p>'
+    + (customerAccount ? '<button class="button button-outline" data-action="new-request">Create a request ' + icon("arrow", 15) + "</button>" : "")
+    + "</div>";
+  const rows = dashboardData.requests.map((request) => requestRow(request)).join("");
+  return '<div class="table-wrap"><table><thead><tr><th>VEHICLE</th><th>SERVICE</th><th>WORKFLOW STAGES</th><th>STATUS</th><th>PRIORITY</th><th>APPOINTMENT</th></tr></thead><tbody>'
+    + rows + "</tbody></table></div>";
 }
-
 function errorPanel(title, message) {
   return `<div class="inline-error"><strong>${escapeHtml(title)}</strong><p>${escapeHtml(message || "The service is unavailable.")}</p><button class="button button-outline" data-action="retry">Retry</button></div>`;
 }
 
 function queueRows() {
   if (dashboardData.errors.queue) return errorPanel("Queue unavailable", dashboardData.errors.queue.message);
-  if (!dashboardData.queue.length) return `<div class="empty-inline"><span>${icon("check", 18)}</span><div><strong>Queue is clear</strong><p>Waiting stages from the backend will appear here.</p></div></div>`;
-  return `<div class="queue-list">${dashboardData.queue.map((entry, index) => {
+  if (!dashboardData.queue.length) return '<div class="empty-inline"><span>' + icon("check", 18)
+    + '</span><div><strong>Queue is clear</strong><p>Waiting stages from the backend will appear here.</p></div></div>';
+  const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
+  const rows = dashboardData.queue.map((entry, index) => {
     const wait = dashboardData.waits[entry.stageId];
-    return `<article class="queue-item"><span class="queue-position">${String(index + 1).padStart(2, "0")}</span><div class="queue-vehicle"><strong>${escapeHtml(entry.vehicleRegistrationNumber)}</strong><span>${escapeHtml(entry.serviceTypeName)} · ${escapeHtml(entry.priority)}</span></div><div class="queue-status"><span class="status-dot"></span>${escapeHtml(entry.stageStatus.replaceAll("_", " "))}</div><div class="queue-wait" title="${escapeHtml(wait?.error || "Backend-calculated waiting estimate")}"><strong>${wait?.error ? "Unavailable" : wait ? `${wait.estimatedWaitMinutes} min` : "—"}</strong><span>EST. WAIT</span></div><button class="icon-button" title="Remove from queue" aria-label="Remove ${escapeHtml(entry.vehicleRegistrationNumber)} from queue" data-action="dequeue" data-stage="${entry.stageId}">×</button></article>`;
-  }).join("")}</div>`;
+    const expectedDuration = serviceDurationLabel(entry.predictedServiceDuration);
+    return '<article class="queue-item"><span class="queue-position">' + String(index + 1).padStart(2, "0")
+      + '</span><div class="queue-vehicle"><strong>' + escapeHtml(entry.vehicleRegistrationNumber)
+      + '</strong><span>' + escapeHtml(entry.serviceTypeName) + " · " + escapeHtml(entry.priority)
+      + '</span><small class="queue-duration">' + (expectedDuration
+        ? "Expected service · " + escapeHtml(expectedDuration) + (admin ? " · " + escapeHtml(predictionSourceLabel(entry.predictionSource)) : "")
+        : "Expected service · unavailable") + '</small></div><div class="queue-status"><span class="status-dot"></span>'
+      + escapeHtml(entry.stageStatus.replaceAll("_", " ")) + '</div><div class="queue-wait" title="'
+      + escapeHtml(wait?.error || "Backend-calculated waiting estimate") + '"><strong>'
+      + (wait?.error ? "Unavailable" : wait ? escapeHtml(wait.estimatedWaitMinutes) + " min" : "—")
+      + '</strong><span>EST. WAIT</span></div><button class="icon-button" title="Remove from queue" aria-label="Remove '
+      + escapeHtml(entry.vehicleRegistrationNumber) + ' from queue" data-action="dequeue" data-stage="'
+      + escapeHtml(entry.stageId) + '">×</button></article>';
+  }).join("");
+  return '<div class="queue-list">' + rows + "</div>";
 }
-
 function resourceCards() {
   if (dashboardData.errors.resources) return errorPanel("Resources unavailable", dashboardData.errors.resources.message);
   if (!dashboardData.resources.length) return `<div class="empty-inline"><span>${icon("wrench", 18)}</span><div><strong>No resources configured</strong><p>Resource status will appear here when the API returns workshop resources.</p></div></div>`;
@@ -600,8 +684,8 @@ function renderDashboard(page = "overview") {
     : page === "resources" && admin ? resourceManagementPage()
     : page === "service-types" && admin ? serviceTypesPage()
       : page === "requests" ? `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">WORKFLOW / ALL</span><h2>Service requests</h2><p>Current requests and workflow stages from the backend.</p></div><div class="panel-actions"><label class="search-box">${icon("search", 16)}<input id="request-search" type="search" placeholder="Search vehicles or service" aria-label="Search service requests"></label><select class="status-filter" id="request-status-filter" aria-label="Filter by request status"><option value="">All statuses</option>${["CREATED", "WAITING", "ASSIGNED", "IN_SERVICE", "COMPLETED", "CANCELLED", "NO_SHOW"].map((status) => `<option value="${status}">${status.replaceAll("_", " ")}</option>`).join("")}</select>${admin ? "" : `<button class="button button-outline" data-action="new-request">New request ${icon("plus", 15)}</button>`}</div></div>${requestTable()}</section>`
-        : `<section class="panel queue-panel"><div class="panel-heading"><div><span class="panel-kicker">WORKFLOW / NOW</span><h2>Queue at a glance</h2><p>Wait estimates update from the live workshop state.</p></div><a class="panel-link" href="#/app/queue">View queue ${icon("arrow", 14)}</a></div>${queueRows()}</section><section class="panel request-panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE / PIPELINE</span><h2>Recent requests</h2><p>Workflow progress for registered service requests.</p></div><a class="panel-link" href="#/app/requests">All requests ${icon("arrow", 14)}</a></div>${requestTable()}</section><section class="dashboard-lower"><div class="panel resource-panel"><div class="panel-heading"><div><span class="panel-kicker">CAPACITY / RESOURCES</span><h2>Workshop resources</h2></div><a class="panel-link" href="#/app/resources">All resources ${icon("arrow", 14)}</a></div>${resourceCards()}</div><aside class="duration-note"><span class="duration-symbol">${icon("clock", 19)}</span><span class="panel-kicker">DURATION &amp; WAITING</span><h3>Two different signals.</h3><p>Duration guidance belongs to each service. Waiting time is calculated dynamically from queue and resource state.</p><div class="duration-note-row"><span>Standard service duration</span><strong>Service type default</strong></div><div class="duration-note-row"><span>Predicted duration</span><strong>Not exposed by current API</strong></div><div class="duration-note-row"><span>Estimated wait</span><strong>Live backend estimate</strong></div></aside></section>`;
-  document.querySelector("#dashboard-content").innerHTML = `<div class="page-heading"><div><span class="eyebrow"><span class="eyebrow-dot"></span> WORKSHOP / OPERATIONS</span><h1>${title}</h1><p>${page === "analytics" ? "Historical performance with a separate live workshop snapshot." : "Real-time operational data from the OPTISERVE backend."}</p></div><div class="page-heading-actions"><span class="refresh-time">Updated ${new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(new Date())}</span><button class="button button-lime" data-action="refresh">Refresh data ${icon("arrow", 15)}</button></div></div>${failed ? `<div class="partial-warning" role="status">${failed} data source${failed === 1 ? " is" : "s are"} unavailable. Displaying available API data only.</div>` : ""}${serviceCards}${content}<p class="api-footnote">Duration shown is the service type default. Persisted ML-predicted duration is not currently included in the service request API response.</p>`;
+        : `<section class="panel queue-panel"><div class="panel-heading"><div><span class="panel-kicker">WORKFLOW / NOW</span><h2>Queue at a glance</h2><p>Wait estimates update from the live workshop state.</p></div><a class="panel-link" href="#/app/queue">View queue ${icon("arrow", 14)}</a></div>${queueRows()}</section><section class="panel request-panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE / PIPELINE</span><h2>Recent requests</h2><p>Workflow progress for registered service requests.</p></div><a class="panel-link" href="#/app/requests">All requests ${icon("arrow", 14)}</a></div>${requestTable()}</section><section class="dashboard-lower"><div class="panel resource-panel"><div class="panel-heading"><div><span class="panel-kicker">CAPACITY / RESOURCES</span><h2>Workshop resources</h2></div><a class="panel-link" href="#/app/resources">All resources ${icon("arrow", 14)}</a></div>${resourceCards()}</div><aside class="duration-note"><span class="duration-symbol">${icon("clock", 19)}</span><span class="panel-kicker">DURATION &amp; WAITING</span><h3>Two different signals.</h3><p>Duration guidance belongs to each service. Waiting time is calculated dynamically from queue and resource state.</p><div class="duration-note-row"><span>Standard service duration</span><strong>Service type default</strong></div><div class="duration-note-row"><span>Predicted duration</span><strong>Shown beside each stage</strong></div><div class="duration-note-row"><span>Estimated wait</span><strong>Live backend estimate</strong></div></aside></section>`;
+  document.querySelector("#dashboard-content").innerHTML = `<div class="page-heading"><div><span class="eyebrow"><span class="eyebrow-dot"></span> WORKSHOP / OPERATIONS</span><h1>${title}</h1><p>${page === "analytics" ? "Historical performance with a separate live workshop snapshot." : "Real-time operational data from the OPTISERVE backend."}</p></div><div class="page-heading-actions"><span class="refresh-time">Updated ${new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(new Date())}</span><button class="button button-lime" data-action="refresh">Refresh data ${icon("arrow", 15)}</button></div></div>${failed ? `<div class="partial-warning" role="status">${failed} data source${failed === 1 ? " is" : "s are"} unavailable. Displaying available API data only.</div>` : ""}${serviceCards}${content}<p class="api-footnote">Service estimates show persisted stage durations and their recorded source. Waiting time remains a live backend calculation.</p>`;
   wireDashboardActions();
 }
 

@@ -4,11 +4,13 @@ import com.minor_project.optiserve_backend.common.api.ConflictException;
 import com.minor_project.optiserve_backend.common.api.ResourceNotFoundException;
 import com.minor_project.optiserve_backend.operations.domain.ServiceRequest;
 import com.minor_project.optiserve_backend.operations.domain.ServiceStage;
+import com.minor_project.optiserve_backend.operations.domain.ServiceDurationPredictionSource;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.ServiceWorkflow;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
 import com.minor_project.optiserve_backend.operations.duration.application.DefaultServiceDurationPredictor;
 import com.minor_project.optiserve_backend.operations.duration.application.ServiceDurationPredictor;
+import com.minor_project.optiserve_backend.operations.duration.application.ServiceDurationPrediction;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceRequestRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceTypeRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceWorkflowRepository;
@@ -16,7 +18,6 @@ import com.minor_project.optiserve_backend.operations.persistence.VehicleReposit
 import com.minor_project.optiserve_backend.operations.servicerequest.api.CreateServiceRequestRequest;
 import com.minor_project.optiserve_backend.operations.servicerequest.api.ServiceRequestResponse;
 import com.minor_project.optiserve_backend.operations.servicerequest.api.ServiceRequestStageResponse;
-import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -76,7 +77,8 @@ public class ServiceRequestApplicationService {
         ServiceWorkflow workflow = ServiceWorkflow.create(serviceRequest);
         stageServiceTypes.forEach(serviceType -> {
             ServiceStage stage = workflow.addStage(serviceType, null);
-            stage.updatePredictedServiceDuration(predictSafely(stage));
+            ServiceDurationPrediction prediction = predictSafely(stage);
+            stage.updatePredictedServiceDuration(prediction.duration(), prediction.source());
         });
 
         ServiceRequest persistedRequest = serviceRequestRepository.save(serviceRequest);
@@ -85,10 +87,12 @@ public class ServiceRequestApplicationService {
         return toResponse(persistedRequest, persistedWorkflow);
     }
 
-    private Duration predictSafely(ServiceStage stage) {
+    private ServiceDurationPrediction predictSafely(ServiceStage stage) {
         try {
-            Duration prediction = serviceDurationPredictor.predict(stage);
-            if (prediction != null && !prediction.isNegative() && !prediction.isZero()) {
+            ServiceDurationPrediction prediction = serviceDurationPredictor.predictWithProvenance(stage);
+            if (prediction != null && prediction.duration() != null
+                    && !prediction.duration().isNegative() && !prediction.duration().isZero()
+                    && prediction.source() != null) {
                 return prediction;
             }
             LOGGER.warn("Service duration predictor returned an invalid value; using the configured default");
@@ -96,7 +100,9 @@ public class ServiceRequestApplicationService {
             LOGGER.warn("Service duration predictor failed; using the configured default ({})",
                     exception.getClass().getSimpleName());
         }
-        return defaultServiceDurationPredictor.predict(stage);
+        return new ServiceDurationPrediction(
+                defaultServiceDurationPredictor.predict(stage),
+                ServiceDurationPredictionSource.DEFAULT_FALLBACK);
     }
 
     @Transactional(readOnly = true)
@@ -175,6 +181,8 @@ public class ServiceRequestApplicationService {
                 stage.getSequenceNumber(),
                 stage.getServiceType().getId(),
                 stage.getServiceType().getName(),
-                stage.getStatus());
+                stage.getStatus(),
+                stage.getPredictedServiceDuration(),
+                stage.getPredictionSource());
     }
 }

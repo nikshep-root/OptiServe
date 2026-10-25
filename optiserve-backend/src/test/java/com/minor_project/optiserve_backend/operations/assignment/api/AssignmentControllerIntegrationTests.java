@@ -191,6 +191,12 @@ class AssignmentControllerIntegrationTests {
                 .andExpect(jsonPath("$.resourceStatus").value("AVAILABLE"))
                 .andExpect(jsonPath("$.actualServiceDuration").value("PT12M"));
 
+        mockMvc.perform(get("/api/assignments").with(user("operator").roles("ADMIN")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].predictedServiceDuration").exists())
+                .andExpect(jsonPath("$[0].actualServiceDuration").value("PT12M"))
+                .andExpect(jsonPath("$[0].predictionSource").value("DEFAULT_FALLBACK"));
+
         var assignment = assignments.findById(assignmentId).orElseThrow();
         assertThat(assignment.getActualServiceDuration()).isEqualTo(Duration.ofMinutes(12));
         assertThat(assignment.getCompletedAt()).isNotNull();

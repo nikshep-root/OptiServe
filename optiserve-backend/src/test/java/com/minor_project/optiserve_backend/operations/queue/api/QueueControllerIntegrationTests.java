@@ -68,11 +68,15 @@ class QueueControllerIntegrationTests {
                 .andExpect(jsonPath("$.stageId").value(eligibleStageId.toString()))
                 .andExpect(jsonPath("$.priority").value("URGENT"))
                 .andExpect(jsonPath("$.status").value("WAITING"))
-                .andExpect(jsonPath("$.stageStatus").value("QUEUED"));
+                .andExpect(jsonPath("$.stageStatus").value("QUEUED"))
+                .andExpect(jsonPath("$.predictedServiceDuration").exists())
+                .andExpect(jsonPath("$.predictionSource").value("DEFAULT_FALLBACK"));
 
         mockMvc.perform(get("/api/queue").with(user("operator").roles("ADMIN")))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$[0].stageId").value(eligibleStageId.toString()));
+                .andExpect(jsonPath("$[0].stageId").value(eligibleStageId.toString()))
+                .andExpect(jsonPath("$[0].predictedServiceDuration").exists())
+                .andExpect(jsonPath("$[0].predictionSource").value("DEFAULT_FALLBACK"));
 
         mockMvc.perform(post("/api/queue/stages/{stageId}", pendingStageId).with(user("operator").roles("ADMIN")))
                 .andExpect(status().isConflict());

@@ -158,6 +158,9 @@ public class AssignmentApplicationService {
                 assignment.getStatus(),
                 assignment.getAssignedAt(),
                 assignment.getStartedAt(),
-                assignment.getCompletedAt());
+                assignment.getCompletedAt(),
+                assignment.getPredictedServiceDuration(),
+                assignment.getActualServiceDuration(),
+                stage.getPredictionSource());
     }
 }

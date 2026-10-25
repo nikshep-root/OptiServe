@@ -73,7 +73,7 @@ For one compatible resource, the estimate is approximately the current assignmen
 
 ## ML and Service Duration
 
-ML predicts expected **service duration**, not authoritative waiting time. The scheduler uses the prediction as an input. If ML is unavailable, use a deterministic fallback duration. Every prediction includes its model version and timestamp.
+ML predicts expected **service duration**, not authoritative waiting time. The scheduler uses the same persisted duration input as before; priority classes, resource compatibility, and dynamic waiting-time calculation remain backend responsibilities. A valid response from the FastAPI service is recorded as ML_MODEL; an unavailable, invalid, unsupported, or failed prediction uses the service-type duration and is recorded as DEFAULT_FALLBACK. Existing stages migrated without source data are marked LEGACY_UNKNOWN, not guessed to be model predictions or defaults.
 
 Actual service may finish earlier or later than predicted. Duration changes must update downstream waiting estimates.
 

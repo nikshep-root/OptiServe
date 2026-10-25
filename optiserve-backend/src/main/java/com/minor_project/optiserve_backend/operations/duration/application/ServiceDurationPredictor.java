@@ -6,5 +6,9 @@ import java.time.Duration;
 /** Provides a non-authoritative expected duration for a service stage. */
 public interface ServiceDurationPredictor {
 
-    Duration predict(ServiceStage serviceStage);
+    ServiceDurationPrediction predictWithProvenance(ServiceStage serviceStage);
+
+    default Duration predict(ServiceStage serviceStage) {
+        return predictWithProvenance(serviceStage).duration();
+    }
 }

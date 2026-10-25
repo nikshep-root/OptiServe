@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.minor_project.optiserve_backend.operations.domain.PriorityClass;
 import com.minor_project.optiserve_backend.operations.domain.ServiceRequest;
 import com.minor_project.optiserve_backend.operations.domain.ServiceStage;
+import com.minor_project.optiserve_backend.operations.domain.ServiceDurationPredictionSource;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.ServiceWorkflow;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
@@ -85,6 +86,27 @@ class MlServiceDurationPredictorTests {
         assertThat(requests).hasValue(1);
         assertThat(OBJECT_MAPPER.readTree(lastRequestBody()))
                 .isEqualTo(OBJECT_MAPPER.readTree(readContractFixture("request.json")));
+    }
+
+    @Test
+    void marksOnlyAValidMlResponseAsModelProvenance() {
+        assertThat(predictor.predictWithProvenance(stage(2020, Instant.parse("2026-10-23T06:00:00Z"))).source())
+                .isEqualTo(ServiceDurationPredictionSource.ML_MODEL);
+    }
+
+    @Test
+    void marksInvalidMlResponseAsDefaultFallback() {
+        responseBody = "{\"predictedDurationMinutes\":0}";
+
+        assertThat(predictor.predictWithProvenance(stage(2020, Instant.parse("2026-10-23T06:00:00Z"))).source())
+                .isEqualTo(ServiceDurationPredictionSource.DEFAULT_FALLBACK);
+    }
+
+    @Test
+    void marksUnsupportedVehicleYearAsDefaultFallback() {
+        assertThat(predictor.predictWithProvenance(stage(2007, Instant.parse("2026-10-23T06:00:00Z"))).source())
+                .isEqualTo(ServiceDurationPredictionSource.DEFAULT_FALLBACK);
+        assertThat(requests).hasValue(0);
     }
 
     @Test
