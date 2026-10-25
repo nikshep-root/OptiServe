@@ -13,6 +13,8 @@ import com.minor_project.optiserve_backend.operations.domain.Resource;
 import com.minor_project.optiserve_backend.operations.domain.ResourceStatus;
 import com.minor_project.optiserve_backend.operations.domain.ServiceStageStatus;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
+import com.minor_project.optiserve_backend.operations.domain.ServiceWorkflowStatus;
+import com.minor_project.optiserve_backend.operations.domain.ServiceRequestStatus;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
 import com.minor_project.optiserve_backend.authentication.domain.AuthUser;
 import com.minor_project.optiserve_backend.authentication.persistence.AuthUserRepository;
@@ -34,6 +36,8 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import jakarta.persistence.EntityManager;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -58,6 +62,8 @@ class AssignmentControllerIntegrationTests {
     @Autowired private ServiceRequestApplicationService serviceRequests;
     @Autowired private QueueApplicationService queue;
     @Autowired private AssignmentApplicationService assignmentService;
+    @Autowired private EntityManager entityManager;
+    @Autowired private JdbcTemplate jdbcTemplate;
 
     @Test
     void customerCannotTriggerStaffAssignmentActions() throws Exception {
@@ -160,6 +166,116 @@ class AssignmentControllerIntegrationTests {
         mockMvc.perform(post("/api/assignments/{id}/complete", assignmentId).with(user("operator").roles("ADMIN"))
                         .contentType(org.springframework.http.MediaType.APPLICATION_JSON).content("{\"actualDurationMinutes\":-1}"))
                 .andExpect(status().isBadRequest());
+        mockMvc.perform(post("/api/assignments/{id}/complete", assignmentId).with(user("operator").roles("ADMIN"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"actualDurationMinutes\":\"invalid\"}"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void completingAssignmentReturnsAndPersistsDurationInMinutes() throws Exception {
+        UUID assignmentId = assigned();
+        mockMvc.perform(post("/api/assignments/{id}/start", assignmentId).with(user("operator").roles("ADMIN")))
+                .andExpect(status().isOk());
+        assignments.flush();
+        stages.flush();
+        resources.flush();
+        entityManager.clear();
+
+        mockMvc.perform(post("/api/assignments/{id}/complete", assignmentId).with(user("operator").roles("ADMIN"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"actualDurationMinutes\":12}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.assignmentStatus").value("COMPLETED"))
+                .andExpect(jsonPath("$.stageStatus").value("COMPLETED"))
+                .andExpect(jsonPath("$.resourceStatus").value("AVAILABLE"))
+                .andExpect(jsonPath("$.actualServiceDuration").value("PT12M"));
+
+        var assignment = assignments.findById(assignmentId).orElseThrow();
+        assertThat(assignment.getActualServiceDuration()).isEqualTo(Duration.ofMinutes(12));
+        assertThat(assignment.getCompletedAt()).isNotNull();
+        assertThat(assignment.getServiceStage().getWorkflow().getStatus())
+                .isEqualTo(ServiceWorkflowStatus.COMPLETED);
+        assertThat(assignment.getServiceRequest().getStatus()).isEqualTo(ServiceRequestStatus.COMPLETED);
+        assertThat(assignment.getServiceRequest().getActualServiceDuration()).isEqualTo(Duration.ofMinutes(12));
+        assertThat(assignment.getResource().getStatus()).isEqualTo(ResourceStatus.AVAILABLE);
+    }
+
+    @Test
+    void completingNonFinalStageActivatesTheNextStageAndKeepsWorkflowActive() throws Exception {
+        ServiceType firstType = serviceTypes.saveAndFlush(
+                ServiceType.create("First stage " + UUID.randomUUID(), null, Duration.ofMinutes(15)));
+        ServiceType secondType = serviceTypes.saveAndFlush(
+                ServiceType.create("Second stage " + UUID.randomUUID(), null, Duration.ofMinutes(20)));
+        Vehicle vehicle = vehicles.saveAndFlush(Vehicle.create(
+                CustomerTestFixtures.createPersistedCustomer(users, customers),
+                "KA" + UUID.randomUUID().toString().substring(0, 8), "Toyota", "Camry", 2024));
+        ServiceRequestResponse request = serviceRequests.create(new CreateServiceRequestRequest(
+                vehicle.getId(), PriorityClass.NORMAL, null, List.of(firstType.getId(), secondType.getId())));
+        UUID firstStageId = request.stages().get(0).id();
+        UUID secondStageId = request.stages().get(1).id();
+        queue.queueStage(firstStageId);
+        resources.saveAndFlush(Resource.create("First bay " + UUID.randomUUID(), Set.of(firstType)));
+        UUID assignmentId = assignmentService.assignNext().assignmentId();
+
+        mockMvc.perform(post("/api/assignments/{id}/start", assignmentId).with(user("operator").roles("ADMIN")))
+                .andExpect(status().isOk());
+        assignments.flush();
+        stages.flush();
+        resources.flush();
+        entityManager.clear();
+        mockMvc.perform(post("/api/assignments/{id}/complete", assignmentId).with(user("operator").roles("ADMIN"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"actualDurationMinutes\":12}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.actualServiceDuration").value("PT12M"));
+
+        assertThat(stages.findById(firstStageId).orElseThrow().getStatus()).isEqualTo(ServiceStageStatus.COMPLETED);
+        assertThat(stages.findById(secondStageId).orElseThrow().getStatus()).isEqualTo(ServiceStageStatus.ELIGIBLE);
+        var completed = assignments.findById(assignmentId).orElseThrow();
+        assertThat(completed.getServiceStage().getWorkflow().getStatus()).isEqualTo(ServiceWorkflowStatus.ACTIVE);
+        assertThat(completed.getServiceRequest().getStatus()).isNotEqualTo(ServiceRequestStatus.COMPLETED);
+    }
+
+    @Test
+    void failedCompletionRollsBackAllLifecycleChanges() throws Exception {
+        ServiceType firstType = serviceTypes.saveAndFlush(
+                ServiceType.create("Rollback first " + UUID.randomUUID(), null, Duration.ofMinutes(15)));
+        ServiceType secondType = serviceTypes.saveAndFlush(
+                ServiceType.create("Rollback second " + UUID.randomUUID(), null, Duration.ofMinutes(20)));
+        Vehicle vehicle = vehicles.saveAndFlush(Vehicle.create(
+                CustomerTestFixtures.createPersistedCustomer(users, customers),
+                "KA" + UUID.randomUUID().toString().substring(0, 8), "Toyota", "Camry", 2024));
+        ServiceRequestResponse request = serviceRequests.create(new CreateServiceRequestRequest(
+                vehicle.getId(), PriorityClass.NORMAL, null, List.of(firstType.getId(), secondType.getId())));
+        UUID firstStageId = request.stages().get(0).id();
+        UUID secondStageId = request.stages().get(1).id();
+        queue.queueStage(firstStageId);
+        resources.saveAndFlush(Resource.create("Rollback bay " + UUID.randomUUID(), Set.of(firstType)));
+        UUID assignmentId = assignmentService.assignNext().assignmentId();
+        assignmentService.start(assignmentId);
+        assignments.flush();
+        stages.flush();
+        resources.flush();
+
+        jdbcTemplate.update("UPDATE service_stages SET status = 'CANCELLED' WHERE id = ?", secondStageId);
+        entityManager.clear();
+
+        mockMvc.perform(post("/api/assignments/{id}/complete", assignmentId).with(user("operator").roles("ADMIN"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"actualDurationMinutes\":12}"))
+                .andExpect(status().isConflict());
+
+        entityManager.clear();
+        var unchanged = assignments.findById(assignmentId).orElseThrow();
+        assertThat(unchanged.getStatus().name()).isEqualTo("IN_PROGRESS");
+        assertThat(unchanged.getActualServiceDuration()).isNull();
+        assertThat(unchanged.getCompletedAt()).isNull();
+        assertThat(unchanged.getServiceStage().getStatus()).isEqualTo(ServiceStageStatus.IN_PROGRESS);
+        assertThat(stages.findById(secondStageId).orElseThrow().getStatus()).isEqualTo(ServiceStageStatus.CANCELLED);
+        assertThat(unchanged.getServiceStage().getWorkflow().getStatus()).isEqualTo(ServiceWorkflowStatus.ACTIVE);
+        assertThat(unchanged.getServiceRequest().getStatus()).isEqualTo(ServiceRequestStatus.CREATED);
+        assertThat(unchanged.getResource().getStatus()).isEqualTo(ResourceStatus.BUSY);
     }
 
     private UUID assigned() {
