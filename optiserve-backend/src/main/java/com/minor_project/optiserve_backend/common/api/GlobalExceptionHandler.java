@@ -4,12 +4,16 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import com.minor_project.optiserve_backend.authentication.application.InvalidCredentialsException;
 import java.time.Instant;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -18,6 +22,8 @@ import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+
+    private static final Logger LOGGER = LoggerFactory.getLogger(GlobalExceptionHandler.class);
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ResponseEntity<ApiErrorResponse> handleValidationException(
@@ -76,7 +82,25 @@ public class GlobalExceptionHandler {
     ResponseEntity<ApiErrorResponse> handleUnexpectedException(
             Exception exception,
             HttpServletRequest request) {
+        LOGGER.error("Unhandled request exception; sanitized stack trace follows: {}", sanitizedStackTrace(exception));
         return response(HttpStatus.INTERNAL_SERVER_ERROR, "An unexpected error occurred.", request, Map.of());
+    }
+
+    private static String sanitizedStackTrace(Throwable exception) {
+        StringBuilder trace = new StringBuilder();
+        Set<Throwable> visited = java.util.Collections.newSetFromMap(new IdentityHashMap<>());
+        Throwable current = exception;
+        while (current != null && visited.add(current)) {
+            if (!trace.isEmpty()) {
+                trace.append("\nCaused by: ");
+            }
+            trace.append(current.getClass().getName());
+            for (StackTraceElement element : current.getStackTrace()) {
+                trace.append("\n  at ").append(element);
+            }
+            current = current.getCause();
+        }
+        return trace.toString();
     }
 
     private ResponseEntity<ApiErrorResponse> response(

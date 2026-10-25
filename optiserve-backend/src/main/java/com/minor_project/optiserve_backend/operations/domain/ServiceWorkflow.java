@@ -151,7 +151,9 @@ public class ServiceWorkflow {
 
     private void requireOwnedStage(ServiceStage stage) {
         Objects.requireNonNull(stage, "stage must not be null");
-        if (stage.getWorkflow() != this) {
+        ServiceWorkflow stageWorkflow = stage.getWorkflow();
+        boolean samePersistedWorkflow = id != null && id.equals(stageWorkflow.getId());
+        if (stageWorkflow != this && !samePersistedWorkflow) {
             throw new IllegalArgumentException("Stage does not belong to this workflow");
         }
     }
