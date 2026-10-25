@@ -3,6 +3,7 @@ package com.minor_project.optiserve_backend.operations.resource.application;
 import com.minor_project.optiserve_backend.common.api.ConflictException;
 import com.minor_project.optiserve_backend.common.api.ResourceNotFoundException;
 import com.minor_project.optiserve_backend.common.api.StateConflictException;
+import com.minor_project.optiserve_backend.operations.automation.application.WorkshopAutomationRequested;
 import com.minor_project.optiserve_backend.operations.domain.Resource;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.persistence.AssignmentRepository;
@@ -19,6 +20,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,14 +31,17 @@ public class ResourceApplicationService {
     private final ResourceRepository resourceRepository;
     private final ServiceTypeRepository serviceTypeRepository;
     private final AssignmentRepository assignmentRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ResourceApplicationService(
             ResourceRepository resourceRepository,
             ServiceTypeRepository serviceTypeRepository,
-            AssignmentRepository assignmentRepository) {
+            AssignmentRepository assignmentRepository,
+            ApplicationEventPublisher eventPublisher) {
         this.resourceRepository = resourceRepository;
         this.serviceTypeRepository = serviceTypeRepository;
         this.assignmentRepository = assignmentRepository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -85,6 +90,9 @@ public class ResourceApplicationService {
         } catch (IllegalStateException exception) {
             throw new StateConflictException("The resource cannot transition to the requested status.", exception);
         }
+        if (request.status() == com.minor_project.optiserve_backend.operations.domain.ResourceStatus.AVAILABLE) {
+            eventPublisher.publishEvent(new WorkshopAutomationRequested());
+        }
         return toResponse(resource);
     }
 
@@ -97,6 +105,7 @@ public class ResourceApplicationService {
             throw new ConflictException("The service type is already compatible with this resource.");
         }
         resource.addCapability(serviceType);
+        eventPublisher.publishEvent(new WorkshopAutomationRequested());
         return toResponse(resource);
     }
 
@@ -109,6 +118,7 @@ public class ResourceApplicationService {
             throw new ResourceNotFoundException("Service type compatibility was not found.");
         }
         resource.removeCapability(serviceType);
+        eventPublisher.publishEvent(new WorkshopAutomationRequested());
     }
 
     @Transactional(readOnly = true)

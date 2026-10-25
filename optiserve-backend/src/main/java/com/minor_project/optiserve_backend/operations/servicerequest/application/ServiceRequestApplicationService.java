@@ -2,6 +2,7 @@ package com.minor_project.optiserve_backend.operations.servicerequest.applicatio
 
 import com.minor_project.optiserve_backend.common.api.ConflictException;
 import com.minor_project.optiserve_backend.common.api.ResourceNotFoundException;
+import com.minor_project.optiserve_backend.operations.automation.application.WorkshopAutomationRequested;
 import com.minor_project.optiserve_backend.operations.domain.ServiceRequest;
 import com.minor_project.optiserve_backend.operations.domain.ServiceStage;
 import com.minor_project.optiserve_backend.operations.domain.ServiceDurationPredictionSource;
@@ -24,6 +25,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Sort;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -38,6 +40,7 @@ public class ServiceRequestApplicationService {
     private final ServiceTypeRepository serviceTypeRepository;
     private final ServiceDurationPredictor serviceDurationPredictor;
     private final DefaultServiceDurationPredictor defaultServiceDurationPredictor;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ServiceRequestApplicationService(
             ServiceRequestRepository serviceRequestRepository,
@@ -45,13 +48,15 @@ public class ServiceRequestApplicationService {
             VehicleRepository vehicleRepository,
             ServiceTypeRepository serviceTypeRepository,
             ServiceDurationPredictor serviceDurationPredictor,
-            DefaultServiceDurationPredictor defaultServiceDurationPredictor) {
+            DefaultServiceDurationPredictor defaultServiceDurationPredictor,
+            ApplicationEventPublisher eventPublisher) {
         this.serviceRequestRepository = serviceRequestRepository;
         this.serviceWorkflowRepository = serviceWorkflowRepository;
         this.vehicleRepository = vehicleRepository;
         this.serviceTypeRepository = serviceTypeRepository;
         this.serviceDurationPredictor = serviceDurationPredictor;
         this.defaultServiceDurationPredictor = defaultServiceDurationPredictor;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -83,6 +88,7 @@ public class ServiceRequestApplicationService {
 
         ServiceRequest persistedRequest = serviceRequestRepository.save(serviceRequest);
         ServiceWorkflow persistedWorkflow = serviceWorkflowRepository.save(workflow);
+        eventPublisher.publishEvent(new WorkshopAutomationRequested());
 
         return toResponse(persistedRequest, persistedWorkflow);
     }

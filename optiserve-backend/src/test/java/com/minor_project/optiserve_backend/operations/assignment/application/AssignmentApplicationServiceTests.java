@@ -104,7 +104,8 @@ class AssignmentApplicationServiceTests {
                 resourceRepository,
                 assignmentRepository,
                 schedulerStrategy,
-                Clock.fixed(Instant.parse("2026-09-14T09:00:00Z"), ZoneOffset.UTC));
+                Clock.fixed(Instant.parse("2026-09-14T09:00:00Z"), ZoneOffset.UTC),
+                org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class));
     }
 
     private QueueEntry queuedEntry() {

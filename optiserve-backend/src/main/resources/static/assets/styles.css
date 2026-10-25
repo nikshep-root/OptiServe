@@ -1891,6 +1891,12 @@ tbody tr[hidden] {
   align-items:center;
   gap:8px
 }
+.automation-panel {max-width:880px}
+.automation-panel .panel-heading {align-items:flex-start}
+.automation-explanation {max-width:700px;margin:26px 0;color:#a6aa9f;font-size:13px;line-height:1.8}
+.automation-explanation p+p {margin-top:14px}
+.automation-actions {display:flex;align-items:center;gap:18px;flex-wrap:wrap;border-top:1px solid #30312c;padding-top:22px}
+.automation-actions .field-hint {max-width:360px}
 .loading-state {
   min-height:50vh;
   display:flex;
