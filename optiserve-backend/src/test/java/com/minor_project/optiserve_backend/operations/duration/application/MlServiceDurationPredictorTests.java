@@ -11,6 +11,7 @@ import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.domain.ServiceWorkflow;
 import com.minor_project.optiserve_backend.operations.domain.Vehicle;
 import com.sun.net.httpserver.HttpServer;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -34,6 +35,7 @@ class MlServiceDurationPredictorTests {
     private volatile String responseBody;
     private volatile long delayMillis;
     private MlServiceDurationPredictor predictor;
+    private SimpleMeterRegistry meterRegistry;
 
     @BeforeEach
     void startStubServer() throws IOException {
@@ -42,6 +44,7 @@ class MlServiceDurationPredictorTests {
         delayMillis = 0;
         capturedRequestBody = "";
         requests.set(0);
+        meterRegistry = new SimpleMeterRegistry();
         server = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
         server.createContext("/predict-duration", exchange -> {
             requests.incrementAndGet();
@@ -77,6 +80,8 @@ class MlServiceDurationPredictorTests {
         ServiceStage stage = stage(2020, Instant.parse("2026-10-23T06:00:00Z"));
 
         assertThat(predictor.predict(stage)).isEqualTo(Duration.ofMinutes(87));
+        assertThat(metric(MlServiceDurationPredictor.SUCCESS_METRIC)).isEqualTo(1);
+        assertThat(metric(MlServiceDurationPredictor.FALLBACK_METRIC)).isZero();
         assertThat(requests).hasValue(1);
         assertThat(OBJECT_MAPPER.readTree(lastRequestBody()))
                 .isEqualTo(OBJECT_MAPPER.readTree(readContractFixture("request.json")));
@@ -106,6 +111,8 @@ class MlServiceDurationPredictorTests {
 
         assertThat(predictor.predict(stage(2020, Instant.parse("2026-10-23T06:00:00Z"))))
                 .isEqualTo(Duration.ofMinutes(35));
+        assertThat(metric(MlServiceDurationPredictor.ERROR_METRIC)).isEqualTo(1);
+        assertThat(metric(MlServiceDurationPredictor.FALLBACK_METRIC)).isEqualTo(1);
     }
 
     @Test
@@ -121,6 +128,8 @@ class MlServiceDurationPredictorTests {
         responseBody = "{\"predictedDurationMinutes\":87.5}";
         assertThat(predictor.predict(stage(2020, Instant.parse("2026-10-23T06:00:00Z"))))
                 .isEqualTo(Duration.ofMinutes(35));
+        assertThat(metric(MlServiceDurationPredictor.ERROR_METRIC)).isEqualTo(3);
+        assertThat(metric(MlServiceDurationPredictor.FALLBACK_METRIC)).isEqualTo(3);
     }
 
     @ParameterizedTest
@@ -130,6 +139,8 @@ class MlServiceDurationPredictorTests {
 
         assertThat(predictor.predict(stage(2020, Instant.parse("2026-10-23T06:00:00Z"))))
                 .isEqualTo(Duration.ofMinutes(35));
+        assertThat(metric(MlServiceDurationPredictor.ERROR_METRIC)).isEqualTo(1);
+        assertThat(metric(MlServiceDurationPredictor.FALLBACK_METRIC)).isEqualTo(1);
     }
 
     @ParameterizedTest
@@ -158,6 +169,9 @@ class MlServiceDurationPredictorTests {
 
         assertThat(predictor.predict(stage(2020, Instant.parse("2026-10-23T06:00:00Z"))))
                 .isEqualTo(Duration.ofMinutes(35));
+        assertThat(metric(MlServiceDurationPredictor.TIMEOUT_METRIC)).isEqualTo(1);
+        assertThat(metric(MlServiceDurationPredictor.ERROR_METRIC)).isZero();
+        assertThat(metric(MlServiceDurationPredictor.FALLBACK_METRIC)).isEqualTo(1);
     }
 
     @Test
@@ -169,6 +183,8 @@ class MlServiceDurationPredictorTests {
 
         assertThat(predictor.predict(stage(2020, Instant.parse("2026-10-23T06:00:00Z"))))
                 .isEqualTo(Duration.ofMinutes(35));
+        assertThat(metric(MlServiceDurationPredictor.ERROR_METRIC)).isEqualTo(1);
+        assertThat(metric(MlServiceDurationPredictor.FALLBACK_METRIC)).isEqualTo(1);
     }
 
     @Test
@@ -176,6 +192,8 @@ class MlServiceDurationPredictorTests {
         assertThat(predictor.predict(stage(2007, Instant.parse("2026-10-23T06:00:00Z"))))
                 .isEqualTo(Duration.ofMinutes(35));
         assertThat(requests).hasValue(0);
+        assertThat(metric(MlServiceDurationPredictor.FALLBACK_METRIC)).isEqualTo(1);
+        assertThat(metric(MlServiceDurationPredictor.ERROR_METRIC)).isZero();
     }
 
     private String lastRequestBody() {
@@ -197,12 +215,17 @@ class MlServiceDurationPredictorTests {
     private MlServiceDurationPredictor newPredictor(int port, Duration responseTimeout) {
         return new MlServiceDurationPredictor(
                 new DefaultServiceDurationPredictor(),
+                meterRegistry,
                 "http://127.0.0.1:" + port,
                 Duration.ofMillis(200),
                 responseTimeout,
                 "Asia/Kolkata",
                 5,
                 1440);
+    }
+
+    private double metric(String name) {
+        return meterRegistry.get(name).counter().count();
     }
 
     private ServiceStage stage(int vehicleYear, Instant appointmentAt) {

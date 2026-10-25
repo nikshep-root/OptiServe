@@ -2,18 +2,19 @@ package com.minor_project.optiserve_backend.common.api;
 
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
+import com.minor_project.optiserve_backend.authentication.application.InvalidCredentialsException;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.dao.DataIntegrityViolationException;
-import com.minor_project.optiserve_backend.authentication.application.InvalidCredentialsException;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.servlet.resource.NoResourceFoundException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -48,6 +49,13 @@ public class GlobalExceptionHandler {
             ResourceNotFoundException exception,
             HttpServletRequest request) {
         return response(HttpStatus.NOT_FOUND, exception.getMessage(), request, Map.of());
+    }
+
+    @ExceptionHandler(NoResourceFoundException.class)
+    ResponseEntity<ApiErrorResponse> handleMissingRoute(
+            NoResourceFoundException exception,
+            HttpServletRequest request) {
+        return response(HttpStatus.NOT_FOUND, "Resource not found.", request, Map.of());
     }
 
     @ExceptionHandler(InvalidCredentialsException.class)

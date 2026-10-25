@@ -2,9 +2,11 @@ package com.minor_project.optiserve_backend.operations.duration.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.convert.ApplicationConversionService;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
+import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
@@ -31,5 +33,10 @@ class ServiceDurationPredictorIntegrationTests {
     @Configuration(proxyBeanMethods = false)
     @Import({MlServiceDurationPredictor.class, DefaultServiceDurationPredictor.class})
     static class PredictorConfiguration {
+
+        @Bean
+        SimpleMeterRegistry simpleMeterRegistry() {
+            return new SimpleMeterRegistry();
+        }
     }
 }

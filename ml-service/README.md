@@ -164,7 +164,9 @@ It does not check or depend on ML model availability.
 
 Readiness probe — checks whether the trained ML model is available and can be loaded.
 Returns `{"status": "ready"}` with HTTP 200 when ready to serve predictions, or HTTP 503
-when the model is missing, unavailable, corrupt, or cannot be loaded.
+when the model is missing, unavailable, corrupt, or cannot be loaded. Failure responses
+use a generic detail message so the model's server-side path is not exposed; logs record
+only the failure category and do not include request data.
 
 ## 6. Tests
 

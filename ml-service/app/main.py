@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+import logging
 
 from fastapi import FastAPI, HTTPException
 
@@ -24,6 +25,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+LOGGER = logging.getLogger(__name__)
+MODEL_UNAVAILABLE_DETAIL = "Prediction model is unavailable."
+
+
+def _safe_failure_category(exception: ModelNotFoundError) -> str:
+    cause = exception.__cause__
+    return type(cause).__name__ if cause is not None else "ModelUnavailable"
+
 
 @app.get("/health")
 def health():
@@ -35,7 +44,8 @@ def ready():
     try:
         get_model()
     except ModelNotFoundError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        LOGGER.warning("ML readiness failed (cause=%s)", _safe_failure_category(exc))
+        raise HTTPException(status_code=503, detail=MODEL_UNAVAILABLE_DETAIL) from None
     return {"status": "ready"}
 
 
@@ -44,6 +54,7 @@ def predict_duration_endpoint(request: PredictionRequest) -> PredictionResponse:
     try:
         minutes = predict_duration(request)
     except ModelNotFoundError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        LOGGER.warning("ML prediction unavailable (cause=%s)", _safe_failure_category(exc))
+        raise HTTPException(status_code=503, detail=MODEL_UNAVAILABLE_DETAIL) from None
 
     return PredictionResponse(predictedDurationMinutes=minutes)

@@ -45,6 +45,11 @@ public class SecurityConfiguration {
                         .requestMatchers("/api/auth/register", "/api/auth/login").permitAll()
                         .requestMatchers("/api/auth/**").authenticated()
                         .requestMatchers("/", "/index.html", "/assets/**", "/favicon.svg").permitAll()
+                        .requestMatchers(HttpMethod.GET,
+                                "/actuator/health",
+                                "/actuator/health/liveness",
+                                "/actuator/health/readiness").permitAll()
+                        .requestMatchers("/actuator", "/actuator/**").hasRole("ADMIN")
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .requestMatchers(HttpMethod.GET, "/api/service-types", "/api/service-types/**").authenticated()
                         .requestMatchers(HttpMethod.GET, "/api/resources", "/api/resources/**").authenticated()
