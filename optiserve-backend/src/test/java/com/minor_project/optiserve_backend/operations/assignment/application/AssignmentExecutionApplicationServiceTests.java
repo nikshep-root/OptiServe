@@ -130,7 +130,8 @@ class AssignmentExecutionApplicationServiceTests {
     }
 
     private AssignmentApplicationService service() {
-        return new AssignmentApplicationService(queueEntries, stages, resources, assignments, scheduler, CLOCK);
+        return new AssignmentApplicationService(queueEntries, stages, resources, assignments, scheduler, CLOCK,
+                org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class));
     }
 
     private Assignment assigned() {

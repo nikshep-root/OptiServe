@@ -31,6 +31,7 @@ async function serveDashboard(page, role, analyticsResponse = analyticsFixture) 
     let body = [];
     let status = 200;
     if (url.pathname === "/api/auth/me") body = { role };
+    else if (url.pathname === "/api/admin/workshop-automation") body = { mode: "MANUAL", updatedAt: "2026-10-01T10:00:00Z" };
     else if (url.pathname === "/api/admin/analytics") {
       analyticsRequests.push(url.searchParams.toString());
       body = analyticsResponse;

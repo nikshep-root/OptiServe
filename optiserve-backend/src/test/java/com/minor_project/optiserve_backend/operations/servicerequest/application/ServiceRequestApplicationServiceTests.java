@@ -132,7 +132,8 @@ class ServiceRequestApplicationServiceTests {
                 vehicleRepository,
                 serviceTypeRepository,
                 serviceDurationPredictor,
-                new DefaultServiceDurationPredictor());
+                new DefaultServiceDurationPredictor(),
+                org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class));
     }
 
     private Vehicle vehicle() {

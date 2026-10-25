@@ -3,6 +3,7 @@ package com.minor_project.optiserve_backend.operations.assignment.application;
 import com.minor_project.optiserve_backend.operations.assignment.api.AssignmentNextResponse;
 import com.minor_project.optiserve_backend.operations.assignment.api.AssignmentNextResult;
 import com.minor_project.optiserve_backend.operations.assignment.api.AssignmentSummaryResponse;
+import com.minor_project.optiserve_backend.operations.automation.application.WorkshopAutomationRequested;
 import com.minor_project.optiserve_backend.operations.domain.Assignment;
 import com.minor_project.optiserve_backend.operations.domain.QueueEntry;
 import com.minor_project.optiserve_backend.operations.domain.QueueEntryStatus;
@@ -22,6 +23,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -33,6 +35,7 @@ public class AssignmentApplicationService {
     private final AssignmentRepository assignmentRepository;
     private final SchedulerStrategy schedulerStrategy;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
 
     public AssignmentApplicationService(
             QueueEntryRepository queueEntryRepository,
@@ -40,13 +43,15 @@ public class AssignmentApplicationService {
             ResourceRepository resourceRepository,
             AssignmentRepository assignmentRepository,
             SchedulerStrategy schedulerStrategy,
-            Clock clock) {
+            Clock clock,
+            ApplicationEventPublisher eventPublisher) {
         this.queueEntryRepository = queueEntryRepository;
         this.serviceStageRepository = serviceStageRepository;
         this.resourceRepository = resourceRepository;
         this.assignmentRepository = assignmentRepository;
         this.schedulerStrategy = schedulerStrategy;
         this.clock = clock;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -109,6 +114,7 @@ public class AssignmentApplicationService {
         Assignment assignment = findAssignmentForUpdate(assignmentId);
         Duration duration = actualDurationMinutes == null ? null : Duration.ofMinutes(actualDurationMinutes);
         assignment.complete(Instant.now(clock), duration);
+        eventPublisher.publishEvent(new WorkshopAutomationRequested());
         return executionResponse(assignment);
     }
 

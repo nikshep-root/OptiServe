@@ -19,6 +19,7 @@ OptiServe combines:
 - Hybrid scheduling
 - Transaction-safe resource assignment
 - Service execution lifecycle
+- Optional MANUAL / AUTO workshop operations mode
 - Dynamic waiting-time estimation
 - A resilient ML-backed service-duration prediction with deterministic default fallback
 
@@ -38,6 +39,7 @@ OptiServe combines:
 - [Service Execution](#service-execution)
 - [Dynamic Waiting Time](#dynamic-waiting-time)
 - [Service Duration Prediction](#service-duration-prediction)
+- [Workshop Automation](#workshop-automation)
 - [Database Schema](#database-schema)
 - [API Overview](#api-overview)
 - [Technology Stack](#technology-stack)
@@ -1404,6 +1406,18 @@ The current service-duration prediction path is:
 The ML service predicts **service duration**. Spring Boot bounds and validates the response and falls back to the service type default when needed.
 
 It will not become the authority for queue order, resource state, or waiting-time promises.
+
+---
+
+## Workshop Automation
+
+Workshop operations default to **MANUAL**. An administrator can read or change the persisted mode through `GET` and `PUT /api/admin/workshop-automation` with a body such as `{"mode":"AUTO"}`. Both endpoints require the ADMIN role. Enabling AUTO is an explicit admin action in the dashboard and asks for confirmation.
+
+In AUTO mode, a new request's eligible first stage and an immediately eligible successor are queued through the existing queue service. The existing hybrid scheduler then attempts compatible, available resources using the existing assignment locks. Resource availability and compatibility changes trigger another bounded assignment pass. A missing compatible resource leaves the stage queued. Critical priority affects the next scheduler choice but never interrupts an in-progress assignment.
+
+When AUTO is enabled, already waiting queue entries keep their existing order and are reconsidered. Other currently eligible stages are added to the end of the queue; pending later workflow stages remain pending. Switching to MANUAL stops future automatic passes and retains all queue entries and active assignments. No scheduled retry runs in the background: a later request, queue, completion, or relevant resource change triggers reconsideration.
+
+The setting is persisted in `workshop_automation_settings`; Flyway seeds one `MANUAL` row for existing databases and new installations. No production records need to be edited manually.
 
 ---
 

@@ -433,12 +433,12 @@ function authPage(mode = "login") {
 function dashboardShell(active = "overview") {
   const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
   const nav = admin
-    ? [["overview", "Workshop overview", "grid"], ["analytics", "Analytics", "grid"], ["requests", "Service requests", "layers"], ["queue", "Live queue", "clock"], ["resources", "Resources", "wrench"], ["service-types", "Service types", "layers"]]
+    ? [["overview", "Workshop overview", "grid"], ["analytics", "Analytics", "grid"], ["automation", "Automation", "check"], ["requests", "Service requests", "layers"], ["queue", "Live queue", "clock"], ["resources", "Resources", "wrench"], ["service-types", "Service types", "layers"]]
     : [["overview", "Overview", "grid"], ["requests", "Service requests", "layers"], ["queue", "My service queue", "clock"], ["vehicles", "My vehicles", "wrench"], ["profile", "Profile", "grid"]];
   return `<div class="app-shell"><aside class="app-sidebar" id="sidebar"><div class="sidebar-brand">${brand(true)}<span>OPERATIONS</span></div><div class="sidebar-caption">WORKSPACE</div><nav class="app-nav" aria-label="Operations navigation">${nav.map(([id, label, glyph]) => `<a href="#/app/${id}" class="${active === id ? "selected" : ""}" ${active === id ? 'aria-current="page"' : ""}>${icon(glyph, 17)}<span>${label}</span>${id === "queue" ? '<i class="nav-dot"></i>' : ""}</a>`).join("")}</nav><div class="sidebar-spacer"></div><div class="sidebar-foot"><div class="system-state"><i></i><span>API CONNECTION</span><b id="connection-label">CHECKING</b></div><button id="sign-out" class="sign-out">${icon("logout", 16)} Sign out</button></div></aside><div class="app-main"><header class="app-topbar"><button class="topbar-menu" id="menu-toggle" type="button" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="false">${icon("menu")}</button><div class="breadcrumbs"><span>OPTISERVE</span><i>/</i><strong>${nav.find(([id]) => id === active)?.[1] || "Overview"}</strong></div><div class="topbar-right"><span class="topbar-date">${new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric" }).format(new Date())}</span><span class="avatar">OP</span></div></header><main class="dashboard-content" id="dashboard-content"><div class="loading-state"><span class="spinner"></span><p>Connecting to your workshop…</p></div></main></div></div>`;
 }
 
-let dashboardData = { customer: null, vehicles: [], requests: [], queue: [], resources: [], serviceTypes: [], assignments: [], analytics: null, waits: {}, errors: {} };
+let dashboardData = { customer: null, vehicles: [], requests: [], queue: [], resources: [], serviceTypes: [], assignments: [], analytics: null, automation: null, waits: {}, errors: {} };
 let dashboardNavigationCleanup = null;
 let activeDashboardPage = "overview";
 let analyticsRange = null;
@@ -459,16 +459,17 @@ async function loadDashboard() {
     admin ? Promise.resolve(null) : api("/api/customers/me"),
     admin ? Promise.resolve([]) : api("/api/vehicles"),
     api("/api/service-requests"), api("/api/queue"), api("/api/resources"), api("/api/service-types"), api("/api/assignments"),
+    admin ? api("/api/admin/workshop-automation") : Promise.resolve(null),
     admin && activeDashboardPage === "analytics"
       ? api(`/api/admin/analytics?from=${encodeURIComponent(analyticsRange.from)}&to=${encodeURIComponent(analyticsRange.to)}`)
       : Promise.resolve(null),
   ]);
-  const names = ["customer", "vehicles", "requests", "queue", "resources", "serviceTypes", "assignments", "analytics"];
+  const names = ["customer", "vehicles", "requests", "queue", "resources", "serviceTypes", "assignments", "automation", "analytics"];
   outcomes.forEach((result, index) => {
     if (result.status === "fulfilled") dashboardData[names[index]] = result.value;
     else {
       dashboardData.errors[names[index]] = result.reason;
-      dashboardData[names[index]] = names[index] === "customer" || names[index] === "analytics" ? null : [];
+      dashboardData[names[index]] = ["customer", "analytics", "automation"].includes(names[index]) ? null : [];
     }
   });
   if (outcomes.some((result) => result.status === "rejected" && result.reason.status === 401)) {
@@ -671,13 +672,28 @@ function resourceCards() {
   return `<div class="resource-grid">${dashboardData.resources.map((resource) => `<article class="resource-card"><div class="resource-head"><span class="resource-id">RESOURCE / ${escapeHtml(resource.id.slice(0, 4).toUpperCase())}</span><i class="resource-state ${String(resource.status).toLowerCase()}"></i></div><h3>${escapeHtml(resource.name)}</h3><span class="status-tag status-${String(resource.status).toLowerCase()}">${escapeHtml(resource.status.replaceAll("_", " "))}</span><div class="resource-compat"><small>COMPATIBLE SERVICES</small><div>${resource.compatibleServiceTypes?.length ? resource.compatibleServiceTypes.map((item) => `<span>${escapeHtml(item.name)}</span>`).join("") : "<span>No compatibility listed</span>"}</div></div></article>`).join("")}</div>`;
 }
 
+let automationActionError = null;
+
+function automationPage() {
+  if (dashboardData.errors.automation) {
+    return errorPanel("Automation setting unavailable", displayError(dashboardData.errors.automation));
+  }
+  const mode = dashboardData.automation?.mode;
+  if (mode !== "MANUAL" && mode !== "AUTO") {
+    return errorPanel("Automation setting unavailable", "The workshop automation API returned an invalid mode.");
+  }
+  const automatic = mode === "AUTO";
+  return `<section class="panel automation-panel"><div class="panel-heading"><div><span class="panel-kicker">WORKSHOP / OPERATING MODE</span><h2>Automatic operations</h2><p>Choose whether eligible work is queued and assigned automatically.</p></div><span class="status-tag ${automatic ? "status-available" : "status-offline"}" data-testid="automation-mode">${automatic ? "AUTO" : "MANUAL"}</span></div><div class="automation-explanation"><p>${automatic ? "AUTO is active. New eligible stages are queued, then the existing priority-aware scheduler attempts compatible available resources." : "MANUAL is active. Staff choose when eligible stages enter the queue and when to assign the next job."}</p><p>Enabling AUTO also considers work already waiting: existing queue entries keep their order, and currently eligible stages are added before the existing scheduler attempts assignments. If no compatible resource is available, work remains queued for a later resource or configuration change. In-progress service is never interrupted.</p></div>${automationActionError ? `<p class="form-error" role="alert">${escapeHtml(automationActionError)}</p>` : ""}<div class="automation-actions"><button class="button ${automatic ? "button-outline" : "button-lime"}" data-action="set-automation-mode" data-mode="${automatic ? "MANUAL" : "AUTO"}">${automatic ? "Return to manual mode" : "Enable automatic operations"}</button><span class="field-hint">Changing modes does not remove queue entries or active assignments.</span></div></section>`;
+}
+
 function renderDashboard(page = "overview") {
   const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
-  const title = { overview: admin ? "Workshop overview" : "My service overview", analytics: "Operational analytics", requests: "Service requests", queue: admin ? "Live queue" : "My service queue", resources: "Resources", "service-types": "Service types", vehicles: "My vehicles", profile: "Customer profile" }[page] || "Workshop overview";
+  const title = { overview: admin ? "Workshop overview" : "My service overview", analytics: "Operational analytics", automation: "Workshop automation", requests: "Service requests", queue: admin ? "Live queue" : "My service queue", resources: "Resources", "service-types": "Service types", vehicles: "My vehicles", profile: "Customer profile" }[page] || "Workshop overview";
   const available = dashboardData.resources.filter((resource) => resource.status === "AVAILABLE").length;
   const failed = Object.values(dashboardData.errors).length;
   const serviceCards = `<section class="metric-grid"><article class="metric-card metric-main"><span class="metric-label">${admin ? "ACTIVE REQUESTS" : "MY ACTIVE REQUESTS"}</span><strong>${dashboardData.requests.filter((request) => request.status !== "COMPLETED" && request.status !== "CANCELLED").length.toString().padStart(2, "0")}</strong><div class="metric-foot"><span class="metric-accent"></span>From service request API</div></article><article class="metric-card"><span class="metric-label">${admin ? "WORKSHOP QUEUE" : "MY QUEUED STAGES"}</span><strong>${dashboardData.queue.length.toString().padStart(2, "0")}</strong><div class="metric-foot">${dashboardData.queue.length ? "Backend-calculated timing" : "No active queue entries"}</div></article>${admin ? `<article class="metric-card"><span class="metric-label">RESOURCES READY</span><strong>${dashboardData.resources.filter((resource) => resource.status === "AVAILABLE").length.toString().padStart(2, "0")}</strong><div class="metric-foot">Compatible workshop resources</div></article>` : `<article class="metric-card"><span class="metric-label">MY VEHICLES</span><strong>${dashboardData.vehicles.length.toString().padStart(2, "0")}</strong><div class="metric-foot">Registered to your profile</div></article>`}<article class="metric-card"><span class="metric-label">SERVICE TYPES</span><strong>${dashboardData.serviceTypes.filter((type) => type.active).length.toString().padStart(2, "0")}</strong><div class="metric-foot">Active for service requests</div></article></section>`;
-  const content = page === "analytics" && admin ? analyticsPage()
+  const content = page === "automation" && admin ? automationPage()
+    : page === "analytics" && admin ? analyticsPage()
     : page === "profile" && !admin ? profilePage()
     : page === "vehicles" ? vehiclesPage()
       : page === "queue" ? `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">OPERATIONS / LIVE</span><h2>${admin ? "Queue sequence" : "Your waiting stages"}</h2><p>Wait estimates are calculated by the backend from current queue and resource state.</p></div>${admin ? `<button class="button button-outline" data-action="assign-next">Assign next ${icon("arrow", 15)}</button>` : ""}</div>${queueRows()}</section>${assignmentsPanel()}<section id="assignment-result"></section>`
@@ -817,6 +833,21 @@ function wireDashboardActions() {
     catch (error) { showToast(error.message); button.disabled = false; }
   }));
   document.querySelectorAll('[data-action="assign-next"]').forEach((button) => button.addEventListener("click", assignNext));
+  document.querySelector('[data-action="set-automation-mode"]')?.addEventListener("click", async (event) => {
+    const button = event.currentTarget;
+    const mode = button.dataset.mode;
+    if (mode === "AUTO" && !window.confirm("Enable automatic operations? Eligible stages, including work already waiting, will be considered by the existing scheduler. In-progress services will not be interrupted.")) return;
+    button.disabled = true;
+    automationActionError = null;
+    try {
+      await api("/api/admin/workshop-automation", { method: "PUT", body: JSON.stringify({ mode }) });
+      await loadDashboard();
+      showToast(`Workshop automation set to ${mode}.`);
+    } catch (error) {
+      automationActionError = displayError(error);
+      renderDashboard("automation");
+    }
+  });
   document.querySelectorAll('[data-action="start-assignment"]').forEach((button) => button.addEventListener("click", startAssignment));
   document.querySelectorAll('[data-action="complete-assignment"]').forEach((button) => button.addEventListener("click", completeAssignment));
   document.querySelectorAll("[data-duration-for]").forEach((input) => input.addEventListener("input", () => {
@@ -1104,7 +1135,7 @@ async function dashboard(page = "overview") {
     location.hash = "#/login";
     return;
   }
-  const adminPage = ["analytics", "resources", "service-types"].includes(page);
+  const adminPage = ["analytics", "automation", "resources", "service-types"].includes(page);
   const customerPage = ["vehicles", "profile"].includes(page);
   if ((role === "ADMIN" && customerPage) || (role !== "ADMIN" && adminPage)) {
     page = "overview";

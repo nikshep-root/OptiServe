@@ -142,6 +142,7 @@ class ResourceApplicationServiceTests {
     }
 
     private ResourceApplicationService service() {
-        return new ResourceApplicationService(resourceRepository, serviceTypeRepository, assignmentRepository);
+        return new ResourceApplicationService(resourceRepository, serviceTypeRepository, assignmentRepository,
+                org.mockito.Mockito.mock(org.springframework.context.ApplicationEventPublisher.class));
     }
 }

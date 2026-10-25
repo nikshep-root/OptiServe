@@ -5,6 +5,7 @@ import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
@@ -20,6 +21,7 @@ public interface AssignmentRepository extends JpaRepository<Assignment, UUID> {
 
     List<Assignment> findByStatus(com.minor_project.optiserve_backend.operations.domain.AssignmentStatus status);
 
+    @EntityGraph(attributePaths = {"serviceRequest", "serviceStage", "resource"})
     List<Assignment> findAllByOrderByAssignedAtDesc();
 
     List<Assignment> findByServiceRequest_Vehicle_Customer_User_EmailIgnoreCaseOrderByAssignedAtDesc(String email);
