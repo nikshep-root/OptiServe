@@ -20,7 +20,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.Duration;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.context.ApplicationEventPublisher;
@@ -56,34 +55,43 @@ public class AssignmentApplicationService {
 
     @Transactional
     public AssignmentNextResponse assignNext() {
-        Optional<QueueEntry> candidate = schedulerStrategy.selectNext(
+        List<QueueEntry> rankedCandidates = schedulerStrategy.rankCandidates(
                 queueEntryRepository.findByStatusOrderByQueuedAtAsc(QueueEntryStatus.WAITING));
-        if (candidate.isEmpty()) {
+        if (rankedCandidates.isEmpty()) {
             return noAssignment(AssignmentNextResult.NO_QUEUED_STAGE);
         }
 
-        ServiceStage stage = serviceStageRepository.findByIdForUpdate(candidate.orElseThrow().getServiceStage().getId())
-                .orElse(null);
-        if (stage == null || stage.getStatus() != ServiceStageStatus.QUEUED) {
-            return noAssignment(AssignmentNextResult.NO_QUEUED_STAGE);
-        }
-        QueueEntry queueEntry = queueEntryRepository.findByServiceStageIdAndStatus(stage.getId(), QueueEntryStatus.WAITING)
-                .orElse(null);
-        if (queueEntry == null) {
-            return noAssignment(AssignmentNextResult.NO_QUEUED_STAGE);
+        boolean foundCurrentQueuedCandidate = false;
+        for (QueueEntry candidate : rankedCandidates) {
+            ServiceStage stage = serviceStageRepository.findByIdForUpdate(candidate.getServiceStage().getId())
+                    .orElse(null);
+            if (stage == null || stage.getStatus() != ServiceStageStatus.QUEUED) {
+                continue;
+            }
+            QueueEntry queueEntry = queueEntryRepository
+                    .findByServiceStageIdAndStatus(stage.getId(), QueueEntryStatus.WAITING)
+                    .orElse(null);
+            if (queueEntry == null) {
+                continue;
+            }
+            foundCurrentQueuedCandidate = true;
+
+            List<Resource> resources = resourceRepository.findByStatusAndCompatibleServiceTypesIdForUpdate(
+                    ResourceStatus.AVAILABLE, stage.getServiceType().getId());
+            if (resources.isEmpty()) {
+                continue;
+            }
+
+            Resource resource = resources.getFirst();
+            Assignment assignment = Assignment.assign(stage, resource, Instant.now(clock), stage.getPredictedServiceDuration());
+            queueEntry.remove();
+            Assignment persistedAssignment = assignmentRepository.saveAndFlush(assignment);
+            return assigned(persistedAssignment);
         }
 
-        List<Resource> resources = resourceRepository.findByStatusAndCompatibleServiceTypesIdForUpdate(
-                ResourceStatus.AVAILABLE, stage.getServiceType().getId());
-        if (resources.isEmpty()) {
-            return noAssignment(AssignmentNextResult.NO_COMPATIBLE_RESOURCE);
-        }
-
-        Resource resource = resources.getFirst();
-        Assignment assignment = Assignment.assign(stage, resource, Instant.now(clock), stage.getPredictedServiceDuration());
-        queueEntry.remove();
-        Assignment persistedAssignment = assignmentRepository.saveAndFlush(assignment);
-        return assigned(persistedAssignment);
+        return noAssignment(foundCurrentQueuedCandidate
+                ? AssignmentNextResult.NO_COMPATIBLE_RESOURCE
+                : AssignmentNextResult.NO_QUEUED_STAGE);
     }
 
     @Transactional(readOnly = true)
