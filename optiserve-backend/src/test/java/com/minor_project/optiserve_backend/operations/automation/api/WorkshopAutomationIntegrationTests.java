@@ -172,6 +172,28 @@ class WorkshopAutomationIntegrationTests {
     }
 
     @Test
+    void autoReconciliationSkipsUnassignableCriticalWorkWithoutDroppingIt() {
+        ServiceType criticalType = serviceType("Auto critical without bay");
+        ServiceType normalType = serviceType("Auto normal with bay");
+        Resource normalBay = resource("Auto normal compatible bay", Set.of(normalType));
+        automationSettings.setMode(WorkshopAutomationMode.AUTO);
+
+        ServiceRequestResponse critical = request(List.of(criticalType), PriorityClass.CRITICAL);
+        QueueEntry criticalEntry = queueEntries.findByServiceStageIdAndStatus(
+                critical.stages().getFirst().id(), QueueEntryStatus.WAITING).orElseThrow();
+        ServiceRequestResponse normal = request(List.of(normalType), PriorityClass.NORMAL);
+
+        Assignment normalAssignment = assignmentFor(normal.id());
+        assertThat(normalAssignment.getResource().getId()).isEqualTo(normalBay.getId());
+        assertThat(stage(normal).getStatus()).isEqualTo(ServiceStageStatus.ASSIGNED);
+        assertThat(stage(critical).getStatus()).isEqualTo(ServiceStageStatus.QUEUED);
+        QueueEntry remainingCritical = queueEntries.findByServiceStageIdAndStatus(
+                critical.stages().getFirst().id(), QueueEntryStatus.WAITING).orElseThrow();
+        assertThat(remainingCritical.getId()).isEqualTo(criticalEntry.getId());
+        assertThat(assignmentForRequest(critical.id())).isEmpty();
+    }
+
+    @Test
     void completionQueuesOnlyImmediateSuccessorAndCompletesFinalWorkflow() {
         ServiceType firstType = serviceType("Initial inspection");
         ServiceType secondType = serviceType("Repair");

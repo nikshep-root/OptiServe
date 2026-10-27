@@ -53,7 +53,7 @@ class AssignmentApplicationServiceTests {
         ServiceStage stage = queueEntry.getServiceStage();
         Resource resource = Resource.create("Inspection Bay", Set.of(stage.getServiceType()));
         when(queueEntryRepository.findByStatusOrderByQueuedAtAsc(QueueEntryStatus.WAITING)).thenReturn(List.of(queueEntry));
-        when(schedulerStrategy.selectNext(List.of(queueEntry))).thenReturn(Optional.of(queueEntry));
+        when(schedulerStrategy.rankCandidates(List.of(queueEntry))).thenReturn(List.of(queueEntry));
         when(serviceStageRepository.findByIdForUpdate(stage.getId())).thenReturn(Optional.of(stage));
         when(queueEntryRepository.findByServiceStageIdAndStatus(stage.getId(), QueueEntryStatus.WAITING))
                 .thenReturn(Optional.of(queueEntry));
@@ -73,7 +73,7 @@ class AssignmentApplicationServiceTests {
     @Test
     void returnsNoQueuedStageWithoutWritingWhenSchedulerHasNoCandidate() {
         when(queueEntryRepository.findByStatusOrderByQueuedAtAsc(QueueEntryStatus.WAITING)).thenReturn(List.of());
-        when(schedulerStrategy.selectNext(List.of())).thenReturn(Optional.empty());
+        when(schedulerStrategy.rankCandidates(List.of())).thenReturn(List.of());
 
         assertThat(service().assignNext().result()).isEqualTo(AssignmentNextResult.NO_QUEUED_STAGE);
         verify(assignmentRepository, never()).saveAndFlush(any());
@@ -84,7 +84,7 @@ class AssignmentApplicationServiceTests {
         QueueEntry queueEntry = queuedEntry();
         ServiceStage stage = queueEntry.getServiceStage();
         when(queueEntryRepository.findByStatusOrderByQueuedAtAsc(QueueEntryStatus.WAITING)).thenReturn(List.of(queueEntry));
-        when(schedulerStrategy.selectNext(List.of(queueEntry))).thenReturn(Optional.of(queueEntry));
+        when(schedulerStrategy.rankCandidates(List.of(queueEntry))).thenReturn(List.of(queueEntry));
         when(serviceStageRepository.findByIdForUpdate(stage.getId())).thenReturn(Optional.of(stage));
         when(queueEntryRepository.findByServiceStageIdAndStatus(stage.getId(), QueueEntryStatus.WAITING))
                 .thenReturn(Optional.of(queueEntry));

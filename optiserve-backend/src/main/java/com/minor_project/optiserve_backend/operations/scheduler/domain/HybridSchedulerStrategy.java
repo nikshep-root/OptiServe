@@ -10,6 +10,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Collection;
 import java.util.Comparator;
+import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
 
@@ -36,34 +37,45 @@ public final class HybridSchedulerStrategy implements SchedulerStrategy {
 
     @Override
     public Optional<QueueEntry> selectNext(Collection<QueueEntry> candidates) {
+        return rankCandidates(candidates).stream().findFirst();
+    }
+
+    @Override
+    public List<QueueEntry> rankCandidates(Collection<QueueEntry> candidates) {
         Objects.requireNonNull(candidates, "candidates must not be null");
+        Instant now = Instant.now(clock);
         return candidates.stream()
                 .filter(HybridSchedulerStrategy::isQueuedCandidate)
-                .max(candidateComparator());
+                .sorted(candidateComparator(now).reversed())
+                .toList();
     }
 
     SchedulerScore score(QueueEntry entry) {
+        return score(entry, Instant.now(clock));
+    }
+
+    private SchedulerScore score(QueueEntry entry, Instant now) {
         Objects.requireNonNull(entry, "entry must not be null");
         PriorityClass priority = entry.getServiceRequest().getPriorityClass();
         if (priority == PriorityClass.CRITICAL) {
             return new SchedulerScore(true, 0);
         }
-        long score = basePriority(priority) + agingPoints(entry.getQueuedAt());
-        score += appointmentBonus(entry, Instant.now(clock));
+        long score = basePriority(priority) + agingPoints(entry.getQueuedAt(), now);
+        score += appointmentBonus(entry, now);
         score += durationBonus(entry.getServiceStage());
         return new SchedulerScore(false, score);
     }
 
-    private Comparator<QueueEntry> candidateComparator() {
-        return Comparator.comparing((QueueEntry entry) -> score(entry).critical())
-                .thenComparingLong(entry -> score(entry).value())
+    private Comparator<QueueEntry> candidateComparator(Instant now) {
+        return Comparator.comparing((QueueEntry entry) -> score(entry, now).critical())
+                .thenComparingLong(entry -> score(entry, now).value())
                 .thenComparing(QueueEntry::getQueuedAt, Comparator.reverseOrder())
                 .thenComparing(entry -> entry.getServiceRequest().getRequestedAt(), Comparator.reverseOrder())
                 .thenComparing(QueueEntry::getId, Comparator.reverseOrder());
     }
 
-    private long agingPoints(Instant queuedAt) {
-        long waitingMinutes = Math.max(0, Duration.between(queuedAt, Instant.now(clock)).toMinutes());
+    private long agingPoints(Instant queuedAt, Instant now) {
+        long waitingMinutes = Math.max(0, Duration.between(queuedAt, now).toMinutes());
         return Math.multiplyExact(waitingMinutes, AGING_POINTS_PER_MINUTE);
     }
 

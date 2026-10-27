@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.minor_project.optiserve_backend.operations.domain.PriorityClass;
+import com.minor_project.optiserve_backend.operations.domain.QueueEntry;
 import com.minor_project.optiserve_backend.operations.domain.QueueEntryStatus;
 import com.minor_project.optiserve_backend.operations.domain.Resource;
 import com.minor_project.optiserve_backend.operations.domain.ResourceStatus;
@@ -134,6 +135,84 @@ class AssignmentControllerIntegrationTests {
                 .isEqualTo(ServiceStageStatus.QUEUED);
         assertThat(queueEntries.findByServiceStageIdAndStatus(request.stages().getFirst().id(), QueueEntryStatus.WAITING))
                 .isPresent();
+    }
+
+    @Test
+    void unassignableCriticalCandidateDoesNotBlockAssignableNormalCandidate() {
+        ServiceType criticalType = serviceTypes.saveAndFlush(
+                ServiceType.create("Critical only " + UUID.randomUUID(), null, Duration.ofMinutes(15)));
+        ServiceType normalType = serviceTypes.saveAndFlush(
+                ServiceType.create("Normal compatible " + UUID.randomUUID(), null, Duration.ofMinutes(15)));
+        ServiceRequestResponse criticalRequest = queuedRequest(PriorityClass.CRITICAL, criticalType);
+        ServiceRequestResponse normalRequest = queuedRequest(PriorityClass.NORMAL, normalType);
+        QueueEntry criticalEntry = queueEntries.findByServiceStageIdAndStatus(
+                criticalRequest.stages().getFirst().id(), QueueEntryStatus.WAITING).orElseThrow();
+        var originalQueuedAt = criticalEntry.getQueuedAt();
+        resources.saveAndFlush(Resource.create("Normal compatible bay " + UUID.randomUUID(), Set.of(normalType)));
+
+        var result = assignmentService.assignNext();
+
+        assertThat(result.result()).isEqualTo(com.minor_project.optiserve_backend.operations.assignment.api.AssignmentNextResult.ASSIGNED);
+        assertThat(result.serviceRequestId()).isEqualTo(normalRequest.id());
+        assertThat(stages.findById(criticalRequest.stages().getFirst().id()).orElseThrow().getStatus())
+                .isEqualTo(ServiceStageStatus.QUEUED);
+        QueueEntry remainingCritical = queueEntries.findByServiceStageIdAndStatus(
+                criticalRequest.stages().getFirst().id(), QueueEntryStatus.WAITING).orElseThrow();
+        assertThat(remainingCritical.getId()).isEqualTo(criticalEntry.getId());
+        assertThat(remainingCritical.getQueuedAt()).isEqualTo(originalQueuedAt);
+        assertThat(assignments.findAllByOrderByAssignedAtDesc()).filteredOn(
+                assignment -> assignment.getServiceRequest().getId().equals(criticalRequest.id())).isEmpty();
+    }
+
+    @Test
+    void compatibleCriticalCandidateStillWinsOverAssignableNormalCandidate() {
+        ServiceType criticalType = serviceTypes.saveAndFlush(
+                ServiceType.create("Critical compatible " + UUID.randomUUID(), null, Duration.ofMinutes(15)));
+        ServiceType normalType = serviceTypes.saveAndFlush(
+                ServiceType.create("Normal also compatible " + UUID.randomUUID(), null, Duration.ofMinutes(15)));
+        ServiceRequestResponse criticalRequest = queuedRequest(PriorityClass.CRITICAL, criticalType);
+        ServiceRequestResponse normalRequest = queuedRequest(PriorityClass.NORMAL, normalType);
+        resources.saveAndFlush(Resource.create("Critical bay " + UUID.randomUUID(), Set.of(criticalType)));
+        resources.saveAndFlush(Resource.create("Normal bay " + UUID.randomUUID(), Set.of(normalType)));
+
+        var result = assignmentService.assignNext();
+
+        assertThat(result.result()).isEqualTo(com.minor_project.optiserve_backend.operations.assignment.api.AssignmentNextResult.ASSIGNED);
+        assertThat(result.serviceRequestId()).isEqualTo(criticalRequest.id());
+        assertThat(stages.findById(normalRequest.stages().getFirst().id()).orElseThrow().getStatus())
+                .isEqualTo(ServiceStageStatus.QUEUED);
+        assertThat(queueEntries.findByServiceStageIdAndStatus(
+                normalRequest.stages().getFirst().id(), QueueEntryStatus.WAITING)).isPresent();
+    }
+
+    @Test
+    void allUnassignableCandidatesRemainQueuedWithoutCreatingAssignments() {
+        ServiceType criticalType = serviceTypes.saveAndFlush(
+                ServiceType.create("Unassignable critical " + UUID.randomUUID(), null, Duration.ofMinutes(15)));
+        ServiceType normalType = serviceTypes.saveAndFlush(
+                ServiceType.create("Unassignable normal " + UUID.randomUUID(), null, Duration.ofMinutes(15)));
+        ServiceRequestResponse criticalRequest = queuedRequest(PriorityClass.CRITICAL, criticalType);
+        ServiceRequestResponse normalRequest = queuedRequest(PriorityClass.NORMAL, normalType);
+        QueueEntry criticalEntry = queueEntries.findByServiceStageIdAndStatus(
+                criticalRequest.stages().getFirst().id(), QueueEntryStatus.WAITING).orElseThrow();
+        QueueEntry normalEntry = queueEntries.findByServiceStageIdAndStatus(
+                normalRequest.stages().getFirst().id(), QueueEntryStatus.WAITING).orElseThrow();
+        long previousAssignmentCount = assignments.count();
+
+        var result = assignmentService.assignNext();
+
+        assertThat(result.result()).isEqualTo(com.minor_project.optiserve_backend.operations.assignment.api.AssignmentNextResult.NO_COMPATIBLE_RESOURCE);
+        assertThat(assignments.count()).isEqualTo(previousAssignmentCount);
+        assertThat(stages.findById(criticalRequest.stages().getFirst().id()).orElseThrow().getStatus())
+                .isEqualTo(ServiceStageStatus.QUEUED);
+        assertThat(stages.findById(normalRequest.stages().getFirst().id()).orElseThrow().getStatus())
+                .isEqualTo(ServiceStageStatus.QUEUED);
+        assertThat(queueEntries.findByServiceStageIdAndStatus(
+                criticalRequest.stages().getFirst().id(), QueueEntryStatus.WAITING).orElseThrow().getId())
+                .isEqualTo(criticalEntry.getId());
+        assertThat(queueEntries.findByServiceStageIdAndStatus(
+                normalRequest.stages().getFirst().id(), QueueEntryStatus.WAITING).orElseThrow().getId())
+                .isEqualTo(normalEntry.getId());
     }
 
     @Test
@@ -356,6 +435,16 @@ class AssignmentControllerIntegrationTests {
                 "KA" + UUID.randomUUID().toString().substring(0, 8), "Toyota", "Camry", 2024));
         ServiceRequestResponse request = serviceRequests.create(new CreateServiceRequestRequest(
                 vehicle.getId(), PriorityClass.NORMAL, null, List.of(type.getId())));
+        queue.queueStage(request.stages().getFirst().id());
+        return request;
+    }
+
+    private ServiceRequestResponse queuedRequest(PriorityClass priority, ServiceType type) {
+        Vehicle vehicle = vehicles.saveAndFlush(Vehicle.create(
+                CustomerTestFixtures.createPersistedCustomer(users, customers),
+                "KA" + UUID.randomUUID().toString().substring(0, 8), "Toyota", "Camry", 2024));
+        ServiceRequestResponse request = serviceRequests.create(new CreateServiceRequestRequest(
+                vehicle.getId(), priority, null, List.of(type.getId())));
         queue.queueStage(request.stages().getFirst().id());
         return request;
     }

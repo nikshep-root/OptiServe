@@ -35,6 +35,18 @@ class HybridSchedulerStrategyTests {
     }
 
     @Test
+    void ranksAllCandidatesInTheSameOrderUsedForSingleSelection() {
+        QueueEntry critical = queued(PriorityClass.CRITICAL, NOW.minusSeconds(60), NOW.minusSeconds(60), null, 1);
+        QueueEntry urgent = queued(PriorityClass.URGENT, NOW.minus(Duration.ofMinutes(20)), NOW.minus(Duration.ofHours(1)), null, 2);
+        QueueEntry normal = queued(PriorityClass.NORMAL, NOW.minus(Duration.ofMinutes(10)), NOW.minus(Duration.ofHours(1)), null, 3);
+
+        List<QueueEntry> ranked = strategy().rankCandidates(List.of(normal, urgent, critical));
+
+        assertThat(ranked).containsExactly(critical, urgent, normal);
+        assertThat(strategy().selectNext(List.of(normal, urgent, critical))).containsSame(ranked.getFirst());
+    }
+
+    @Test
     void urgentBeatsNormalWhenOtherFactorsAreEqual() {
         QueueEntry urgent = queued(PriorityClass.URGENT, NOW.minus(Duration.ofMinutes(10)), NOW.minus(Duration.ofHours(1)), null, 1);
         QueueEntry normal = queued(PriorityClass.NORMAL, NOW.minus(Duration.ofMinutes(10)), NOW.minus(Duration.ofHours(1)), null, 2);
