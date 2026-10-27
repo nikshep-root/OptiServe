@@ -112,6 +112,9 @@ public class AssignmentApplicationService {
     @Transactional
     public com.minor_project.optiserve_backend.operations.assignment.api.AssignmentExecutionResponse complete(UUID assignmentId, Long actualDurationMinutes) {
         Assignment assignment = findAssignmentForUpdate(assignmentId);
+        resourceRepository.findByIdForUpdate(assignment.getResource().getId())
+                .orElseThrow(() -> new com.minor_project.optiserve_backend.common.api.ResourceNotFoundException(
+                        "Resource was not found."));
         Duration duration = actualDurationMinutes == null ? null : Duration.ofMinutes(actualDurationMinutes);
         assignment.complete(Instant.now(clock), duration);
         eventPublisher.publishEvent(new WorkshopAutomationRequested());

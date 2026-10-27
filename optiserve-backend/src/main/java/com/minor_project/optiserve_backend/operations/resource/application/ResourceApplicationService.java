@@ -4,6 +4,7 @@ import com.minor_project.optiserve_backend.common.api.ConflictException;
 import com.minor_project.optiserve_backend.common.api.ResourceNotFoundException;
 import com.minor_project.optiserve_backend.common.api.StateConflictException;
 import com.minor_project.optiserve_backend.operations.automation.application.WorkshopAutomationRequested;
+import com.minor_project.optiserve_backend.operations.domain.AssignmentStatus;
 import com.minor_project.optiserve_backend.operations.domain.Resource;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
 import com.minor_project.optiserve_backend.operations.persistence.AssignmentRepository;
@@ -84,9 +85,12 @@ public class ResourceApplicationService {
     @Transactional
     @CacheEvict(cacheNames = "resourceCompatibleServiceTypes", allEntries = true)
     public ResourceResponse changeStatus(UUID id, UpdateResourceStatusRequest request) {
-        Resource resource = findResource(id);
+        Resource resource = resourceRepository.findByIdForUpdate(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Resource was not found."));
+        boolean hasActiveAssignment = assignmentRepository.existsByResourceIdAndStatusIn(
+                id, List.of(AssignmentStatus.ASSIGNED, AssignmentStatus.IN_PROGRESS));
         try {
-            resource.changeStatus(request.status());
+            resource.changeStatus(request.status(), hasActiveAssignment);
         } catch (IllegalStateException exception) {
             throw new StateConflictException("The resource cannot transition to the requested status.", exception);
         }

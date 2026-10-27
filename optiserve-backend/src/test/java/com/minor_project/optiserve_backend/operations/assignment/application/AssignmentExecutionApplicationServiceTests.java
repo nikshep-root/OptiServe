@@ -60,6 +60,8 @@ class AssignmentExecutionApplicationServiceTests {
     void rejectsCompletionBeforeStartAndCompletesWithExplicitDuration() {
         Assignment assignment = assigned(); UUID id = UUID.randomUUID();
         when(assignments.findByIdForUpdate(id)).thenReturn(Optional.of(assignment));
+        when(resources.findByIdForUpdate(assignment.getResource().getId()))
+                .thenReturn(Optional.of(assignment.getResource()));
         assertThatIllegalStateException().isThrownBy(() -> service().complete(id, 12L));
 
         service().start(id);
@@ -76,6 +78,8 @@ class AssignmentExecutionApplicationServiceTests {
     void completionWithoutDurationUsesElapsedTime() {
         Assignment assignment = assigned(); UUID id = UUID.randomUUID();
         when(assignments.findByIdForUpdate(id)).thenReturn(Optional.of(assignment));
+        when(resources.findByIdForUpdate(assignment.getResource().getId()))
+                .thenReturn(Optional.of(assignment.getResource()));
         service().start(id);
         assertThat(service().complete(id, null).actualServiceDuration()).isZero();
     }

@@ -87,11 +87,22 @@ public class Resource {
         updatedAt = Instant.now();
     }
 
-    public void changeStatus(ResourceStatus targetStatus) {
+    public void changeStatus(ResourceStatus targetStatus, boolean hasActiveAssignment) {
         Objects.requireNonNull(targetStatus, "targetStatus must not be null");
         switch (targetStatus) {
-            case AVAILABLE -> markAvailable();
-            case BUSY -> markBusy();
+            case AVAILABLE -> {
+                if (hasActiveAssignment) {
+                    throw new IllegalStateException("A resource with active work cannot become available");
+                }
+                markAvailable();
+            }
+            case BUSY -> {
+                if (!hasActiveAssignment) {
+                    throw new IllegalStateException("A resource without active work cannot become busy");
+                }
+                status = ResourceStatus.BUSY;
+                updatedAt = Instant.now();
+            }
             case OFFLINE -> markOffline();
         }
     }

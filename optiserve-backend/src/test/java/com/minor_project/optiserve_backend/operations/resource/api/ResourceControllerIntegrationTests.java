@@ -64,6 +64,13 @@ class ResourceControllerIntegrationTests {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.name").value("Counter A"));
 
+        mockMvc.perform(patch("/api/resources/{id}/status", resource.getId())
+                        .with(user("operator").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"AVAILABLE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("AVAILABLE"));
+
         mockMvc.perform(patch("/api/resources/{id}", resource.getId())
                         .with(user("operator").roles("ADMIN"))
                         .contentType(MediaType.APPLICATION_JSON)
@@ -77,6 +84,13 @@ class ResourceControllerIntegrationTests {
                         .content("{\"status\":\"OFFLINE\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.status").value("OFFLINE"));
+
+        mockMvc.perform(patch("/api/resources/{id}/status", resource.getId())
+                        .with(user("operator").roles("ADMIN"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"AVAILABLE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("AVAILABLE"));
 
         mockMvc.perform(patch("/api/resources/{id}/status", resource.getId())
                         .with(user("operator").roles("ADMIN"))
