@@ -3,6 +3,7 @@ package com.minor_project.optiserve_backend.operations.assignment.api;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -241,6 +242,51 @@ class AssignmentControllerIntegrationTests {
         var completed = assignments.findById(assignmentId).orElseThrow();
         assertThat(completed.getServiceStage().getWorkflow().getStatus()).isEqualTo(ServiceWorkflowStatus.ACTIVE);
         assertThat(completed.getServiceRequest().getStatus()).isNotEqualTo(ServiceRequestStatus.COMPLETED);
+    }
+
+    @Test
+    void activeAssignmentCannotBeMarkedAvailableAndOfflineStateSurvivesCompletion() throws Exception {
+        ServiceRequestResponse request = queuedRequest();
+        ServiceType type = stages.findById(request.stages().getFirst().id()).orElseThrow().getServiceType();
+        Resource resource = resources.saveAndFlush(Resource.create(
+                "Status invariant bay " + UUID.randomUUID(), Set.of(type)));
+        UUID assignmentId = assignmentService.assignNext().assignmentId();
+
+        mockMvc.perform(patch("/api/resources/{id}/status", resource.getId())
+                        .with(user("operator").roles("ADMIN"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"AVAILABLE\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.message").value("The request conflicts with existing data."));
+        assertThat(resources.findById(resource.getId()).orElseThrow().getStatus()).isEqualTo(ResourceStatus.BUSY);
+
+        mockMvc.perform(post("/api/assignments/{id}/start", assignmentId).with(user("operator").roles("ADMIN")))
+                .andExpect(status().isOk());
+        mockMvc.perform(patch("/api/resources/{id}/status", resource.getId())
+                        .with(user("operator").roles("ADMIN"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"AVAILABLE\"}"))
+                .andExpect(status().isConflict());
+
+        mockMvc.perform(patch("/api/resources/{id}/status", resource.getId())
+                        .with(user("operator").roles("ADMIN"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"OFFLINE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("OFFLINE"));
+        mockMvc.perform(post("/api/assignments/{id}/complete", assignmentId).with(user("operator").roles("ADMIN"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"actualDurationMinutes\":12}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.resourceStatus").value("OFFLINE"));
+
+        mockMvc.perform(patch("/api/resources/{id}/status", resource.getId())
+                        .with(user("operator").roles("ADMIN"))
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"status\":\"AVAILABLE\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("AVAILABLE"));
+        assertThat(assignments.findById(assignmentId).orElseThrow().getStatus().name()).isEqualTo("COMPLETED");
     }
 
     @Test

@@ -103,7 +103,7 @@ class WorkshopAnalyticsControllerIntegrationTests {
         Resource offlineResource = resources.findAll().stream()
                 .filter(resource -> resource.getName().startsWith("Offline bay"))
                 .findFirst().orElseThrow();
-        offlineResource.changeStatus(ResourceStatus.OFFLINE);
+        offlineResource.changeStatus(ResourceStatus.OFFLINE, false);
         resources.saveAndFlush(offlineResource);
 
         LocalDate today = LocalDate.now(ZoneOffset.UTC);

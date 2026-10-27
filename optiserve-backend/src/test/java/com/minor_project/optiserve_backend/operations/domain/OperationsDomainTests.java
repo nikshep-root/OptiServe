@@ -42,6 +42,24 @@ class OperationsDomainTests {
     }
 
     @Test
+    void adminStatusTransitionsMustMatchActiveAssignmentState() {
+        Resource resource = Resource.create("Status transition bay", Set.of());
+
+        assertThatIllegalStateException()
+                .isThrownBy(() -> resource.changeStatus(ResourceStatus.BUSY, false));
+        assertThatIllegalStateException()
+                .isThrownBy(() -> resource.changeStatus(ResourceStatus.AVAILABLE, true));
+
+        resource.changeStatus(ResourceStatus.OFFLINE, true);
+        assertThat(resource.getStatus()).isEqualTo(ResourceStatus.OFFLINE);
+        resource.changeStatus(ResourceStatus.BUSY, true);
+        assertThat(resource.getStatus()).isEqualTo(ResourceStatus.BUSY);
+
+        resource.changeStatus(ResourceStatus.AVAILABLE, false);
+        assertThat(resource.getStatus()).isEqualTo(ResourceStatus.AVAILABLE);
+    }
+
+    @Test
     void firstStageIsEligibleAndLaterStagesRemainPendingInSequenceOrder() {
         ServiceWorkflow workflow = workflow();
         ServiceStage first = workflow.addStage(serviceType(), Duration.ofMinutes(15));

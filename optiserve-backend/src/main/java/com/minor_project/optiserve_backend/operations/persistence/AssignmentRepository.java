@@ -1,6 +1,7 @@
 package com.minor_project.optiserve_backend.operations.persistence;
 
 import com.minor_project.optiserve_backend.operations.domain.Assignment;
+import com.minor_project.optiserve_backend.operations.domain.AssignmentStatus;
 import jakarta.persistence.LockModeType;
 import java.util.Optional;
 import java.util.List;
@@ -14,6 +15,10 @@ import org.springframework.data.repository.query.Param;
 public interface AssignmentRepository extends JpaRepository<Assignment, UUID> {
 
     boolean existsByResourceId(UUID resourceId);
+
+    boolean existsByResourceIdAndStatusIn(
+            UUID resourceId,
+            List<AssignmentStatus> statuses);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select assignment from Assignment assignment where assignment.id = :id")

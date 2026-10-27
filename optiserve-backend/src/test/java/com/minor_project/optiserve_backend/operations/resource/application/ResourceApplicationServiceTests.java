@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 
 import com.minor_project.optiserve_backend.common.api.ConflictException;
 import com.minor_project.optiserve_backend.common.api.ResourceNotFoundException;
+import com.minor_project.optiserve_backend.common.api.StateConflictException;
 import com.minor_project.optiserve_backend.operations.domain.Resource;
 import com.minor_project.optiserve_backend.operations.domain.ResourceStatus;
 import com.minor_project.optiserve_backend.operations.domain.ServiceType;
@@ -69,6 +70,7 @@ class ResourceApplicationServiceTests {
         UUID id = UUID.randomUUID();
         Resource resource = Resource.create("Counter A", Set.of());
         when(resourceRepository.findById(id)).thenReturn(Optional.of(resource));
+        when(resourceRepository.findByIdForUpdate(id)).thenReturn(Optional.of(resource));
 
         var updated = service().update(id, new UpdateResourceRequest("Counter B"));
         var offline = service().changeStatus(id, new UpdateResourceStatusRequest(ResourceStatus.OFFLINE));
@@ -76,7 +78,7 @@ class ResourceApplicationServiceTests {
         assertThat(updated.name()).isEqualTo("Counter B");
         assertThat(offline.status()).isEqualTo(ResourceStatus.OFFLINE);
         assertThatThrownBy(() -> service().changeStatus(id, new UpdateResourceStatusRequest(ResourceStatus.BUSY)))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(StateConflictException.class);
     }
 
     @Test
