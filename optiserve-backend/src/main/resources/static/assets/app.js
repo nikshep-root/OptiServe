@@ -100,7 +100,7 @@ async function api(path, options = {}) {
 }
 
 function brand(light = false) {
-  return `<a class="brand ${light ? "brand-light" : ""}" href="/" aria-label="OPTISERVE home"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i></span><span>OPTI<span>SERVE</span></span></a>`;
+  return `<a class="brand ${light ? "brand-light" : ""}" href="/" aria-label="OPTISERVE home"><span class="brand-mark" aria-hidden="true"><img src="/assets/optiserve-logo.png" alt=""></span><span>OPTI<span>SERVE</span></span></a>`;
 }
 
 let landingStoryCleanup = null;
@@ -423,6 +423,7 @@ function authPage(mode = "login") {
         sessionStorage.setItem(TOKEN_KEY, token.accessToken);
         const session = await api("/api/auth/me");
         sessionStorage.setItem(ROLE_KEY, session.role);
+        rememberValidatedSession(sessionStorage.getItem(TOKEN_KEY), session.role);
       }
       if (registering) {
         button.innerHTML = "Saving profile…";
@@ -443,7 +444,7 @@ function dashboardShell(active = "overview") {
   const nav = admin
     ? [["overview", "Workshop overview", "grid"], ["work", "Active work", "wrench"], ["history", "Service history", "clock"], ["analytics", "Analytics", "grid"], ["automation", "Automation", "check"], ["requests", "Service requests", "layers"], ["queue", "Live queue", "clock"], ["resources", "Resources", "wrench"], ["service-types", "Service types", "layers"]]
     : [["overview", "Overview", "grid"], ["requests", "Service requests", "layers"], ["queue", "My service queue", "clock"], ["vehicles", "My vehicles", "wrench"], ["profile", "Profile", "grid"]];
-  return `<div class="app-shell ${admin ? "workshop-app" : "customer-app"}"><aside class="app-sidebar" id="sidebar"><div class="sidebar-brand">${brand(true)}<span>${admin ? "WORKSHOP" : "CUSTOMER"}</span></div><div class="sidebar-caption">${admin ? "Workshop operations" : "Your service account"}</div><nav class="app-nav" aria-label="Operations navigation">${nav.map(([id, label, glyph]) => `<a href="#/app/${id}" class="${active === id ? "selected" : ""}" ${active === id ? 'aria-current="page"' : ""}>${icon(glyph, 17)}<span>${label}</span>${id === "queue" ? '<i class="nav-dot"></i>' : ""}</a>`).join("")}</nav><div class="sidebar-spacer"></div><div class="sidebar-foot"><div class="system-state"><i></i><span>API CONNECTION</span><b id="connection-label">CHECKING</b></div><button id="sign-out" class="sign-out">${icon("logout", 16)} Sign out</button></div></aside><div class="app-main"><header class="app-topbar"><button class="topbar-menu" id="menu-toggle" type="button" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="false">${icon("menu")}</button><div class="breadcrumbs"><span>OPTISERVE</span><i>/</i><strong>${nav.find(([id]) => id === active)?.[1] || "Overview"}</strong></div><div class="topbar-right"><span class="topbar-date">${new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric" }).format(new Date())}</span><span class="avatar">OP</span></div></header><main class="dashboard-content" id="dashboard-content"><div class="loading-state"><span class="spinner"></span><p>Connecting to your workshop…</p></div></main></div></div>`;
+  return `<div class="app-shell ${admin ? "workshop-app" : "customer-app"}"><aside class="app-sidebar" id="sidebar"><div class="sidebar-brand">${brand(true)}<span>${admin ? "WORKSHOP" : "CUSTOMER"}</span></div><div class="sidebar-caption">${admin ? "Workshop operations" : "Your service account"}</div><nav class="app-nav" aria-label="Operations navigation">${nav.map(([id, label, glyph]) => `<a href="#/app/${id}" class="${active === id ? "selected" : ""}" ${active === id ? 'aria-current="page"' : ""}>${icon(glyph, 17)}<span>${label}</span>${id === "queue" ? '<i class="nav-dot"></i>' : ""}</a>`).join("")}</nav><div class="sidebar-spacer"></div><div class="sidebar-foot"><div class="system-state"><i></i><span>API CONNECTION</span><b id="connection-label">CHECKING</b></div><button id="sign-out" class="sign-out">${icon("logout", 16)} Sign out</button></div></aside><div class="app-main"><header class="app-topbar"><button class="topbar-menu" id="menu-toggle" type="button" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="false">${icon("menu")}</button><div class="breadcrumbs"><span>OPTISERVE</span><i>/</i><strong>${nav.find(([id]) => id === active)?.[1] || "Overview"}</strong></div><div class="topbar-right"><span class="topbar-date">${new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric" }).format(new Date())}</span><span class="avatar">OP</span></div></header><main class="dashboard-content" id="dashboard-content"><div class="dashboard-loading" role="status"><span class="spinner"></span><p>Loading this view…</p></div></main></div></div>`;
 }
 
 let dashboardData = { customer: null, vehicles: [], requests: [], queue: [], resources: [], serviceTypes: [], assignments: [], analytics: null, automation: null, waits: {}, errors: {} };
@@ -452,6 +453,79 @@ let activeDashboardPage = "overview";
 let dashboardLoadVersion = 0;
 let dashboardUpdatedAt = null;
 let analyticsRange = null;
+let validatedSessionToken = null;
+let sessionValidationToken = null;
+let sessionValidationPromise = null;
+
+function rememberValidatedSession(token, role) {
+  if (!token || !["ADMIN", "USER"].includes(role)) return;
+  validatedSessionToken = token;
+  sessionStorage.setItem(ROLE_KEY, role);
+}
+
+function clearSavedSession() {
+  sessionStorage.removeItem(TOKEN_KEY);
+  sessionStorage.removeItem(ROLE_KEY);
+  validatedSessionToken = null;
+  sessionValidationToken = null;
+  sessionValidationPromise = null;
+}
+
+function expireDashboardSession() {
+  clearSavedSession();
+  dashboardLoadVersion++;
+  location.hash = "#/login";
+}
+
+function validateDashboardSession(token) {
+  if (validatedSessionToken === token) return Promise.resolve({ role: sessionStorage.getItem(ROLE_KEY) });
+  if (sessionValidationToken === token && sessionValidationPromise) return sessionValidationPromise;
+  sessionValidationToken = token;
+  sessionValidationPromise = api("/api/auth/me").then((session) => {
+    if (sessionStorage.getItem(TOKEN_KEY) === token) rememberValidatedSession(token, session.role);
+    return session;
+  }).finally(() => {
+    if (sessionValidationToken === token) {
+      sessionValidationToken = null;
+      sessionValidationPromise = null;
+    }
+  });
+  return sessionValidationPromise;
+}
+
+function dashboardPageAllowed(page, role) {
+  const adminOnly = ["analytics", "automation", "resources", "service-types", "work", "history"];
+  const customerOnly = ["vehicles", "profile"];
+  return !(role === "ADMIN" && customerOnly.includes(page)) && !(role === "USER" && adminOnly.includes(page));
+}
+
+function updateDashboardNavigation(page) {
+  const links = document.querySelectorAll(".app-nav a");
+  links.forEach((link) => {
+    const selected = link.getAttribute("href") === `#/app/${page}`;
+    link.classList.toggle("selected", selected);
+    if (selected) link.setAttribute("aria-current", "page");
+    else link.removeAttribute("aria-current");
+  });
+  const activeLink = [...links].find((link) => link.classList.contains("selected"));
+  const breadcrumb = document.querySelector(".breadcrumbs strong");
+  if (breadcrumb) breadcrumb.textContent = activeLink?.querySelector("span")?.textContent || "Overview";
+}
+
+function showDashboardSessionError(error, page) {
+  const content = document.querySelector("#dashboard-content");
+  const connection = document.querySelector("#connection-label");
+  if (connection) connection.textContent = "UNAVAILABLE";
+  document.querySelector(".system-state")?.classList.add("disconnected");
+  const errorMarkup = `<section class="error-panel dashboard-session-error" role="alert"><span class="panel-kicker">CONNECTION / SESSION CHECK</span><h2>Could not verify your account</h2><p>${escapeHtml(displayError(error))}</p><button class="button button-lime" type="button" data-action="retry-session">Retry connection</button></section>`;
+  const target = content || document.querySelector(".auth-panel");
+  if (!target) return;
+  target.innerHTML = errorMarkup;
+  target.querySelector('[data-action="retry-session"]')?.addEventListener("click", () => {
+    validatedSessionToken = null;
+    dashboard(page, { retrySession: true });
+  });
+}
 
 function defaultAnalyticsRange() {
   const to = new Date();
@@ -479,7 +553,7 @@ async function loadDashboard() {
     else dashboardData.errors[names[index]] = result.reason;
   });
   if (outcomes.some(result => result.status === "rejected" && result.reason.status === 401)) {
-    sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(ROLE_KEY); location.hash = "#/login"; return;
+    expireDashboardSession(); return;
   }
   const successes = outcomes.filter(result => result.status === "fulfilled").length;
   const coreUnavailable = ["requests", "queue"].some(name => dashboardData.errors[name]);
@@ -493,7 +567,7 @@ async function loadDashboard() {
     catch (error) { return [entry.stageId, { error: error.message, status: error.status }]; }
   }));
   if (version !== dashboardLoadVersion) return;
-  if (waits.some(([,wait]) => wait.status === 401)) { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(ROLE_KEY); location.hash = "#/login"; return; }
+  if (waits.some(([,wait]) => wait.status === 401)) { expireDashboardSession(); return; }
   dashboardData.waits = Object.fromEntries(waits);
   renderDashboard(page);
 }
@@ -748,7 +822,7 @@ function wireDashboardActions() {
   dashboardNavigationCleanup?.();
   dashboardNavigationCleanup = null;
   const signOut = document.querySelector("#sign-out");
-  if (signOut) signOut.onclick = () => { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(ROLE_KEY); assignmentDurationDrafts.clear(); assignmentActionErrors.clear(); location.hash = "#/login"; };
+  if (signOut) signOut.onclick = () => { clearSavedSession(); assignmentDurationDrafts.clear(); assignmentActionErrors.clear(); location.hash = "#/login"; };
   const menuButton = document.querySelector("#menu-toggle");
   const sidebar = document.querySelector("#sidebar");
   if (menuButton && sidebar) {
@@ -1185,48 +1259,71 @@ function showToast(message) {
 
 async function dashboard(page = "overview") {
   const routeVersion = dashboardLoadVersion;
-  if (!sessionStorage.getItem(TOKEN_KEY)) { location.hash = "#/login"; return; }
-  app.innerHTML = '<div class="loading-state"><span class="spinner"></span><p>Checking your account…</p></div>';
-  let role;
-  try {
-    const session = await api("/api/auth/me");
-    if (routeVersion !== dashboardLoadVersion) return;
-    role = session.role;
-    sessionStorage.setItem(ROLE_KEY, role);
-  } catch (error) {
-    if (routeVersion !== dashboardLoadVersion) return;
-    if (error.status !== 401) { app.innerHTML = `<main class="auth-shell"><section class="auth-panel"><h1>Unable to open your account</h1><p>${escapeHtml(displayError(error))}</p><button class="button" id="retry-session">Try again</button><a href="#/login">Back to sign in</a></section></main>`; document.querySelector("#retry-session").onclick = () => dashboard(page); return; }
-    sessionStorage.removeItem(TOKEN_KEY);
-    sessionStorage.removeItem(ROLE_KEY);
-    location.hash = "#/login";
-    return;
+  const token = sessionStorage.getItem(TOKEN_KEY);
+  let role = sessionStorage.getItem(ROLE_KEY);
+  if (!token) { clearSavedSession(); location.hash = "#/login"; return; }
+  if (!["ADMIN", "USER"].includes(role)) role = null;
+  const shell = document.querySelector(".app-shell");
+  const shellRoleMatches = shell && shell.classList.contains(role === "ADMIN" ? "workshop-app" : "customer-app");
+  if (role && !shellRoleMatches) {
+    activeDashboardPage = dashboardPageAllowed(page, role) ? page : "overview";
+    if (page === "analytics" && !analyticsRange) analyticsRange = defaultAnalyticsRange();
+    app.innerHTML = dashboardShell(activeDashboardPage);
+    wireDashboardActions();
+  } else if (!role && !shell) {
+    app.innerHTML = '<main class="auth-shell"><section class="auth-panel"><div class="dashboard-loading" role="status"><span class="spinner"></span><p>Establishing your account session…</p></div></section></main>';
   }
-  const adminPage = ["analytics", "automation", "resources", "service-types", "work", "history"].includes(page);
-  const customerPage = ["vehicles", "profile"].includes(page);
-  if ((role === "ADMIN" && customerPage) || (role !== "ADMIN" && adminPage)) {
+  if (role && !dashboardPageAllowed(page, role)) {
     page = "overview";
     if (location.hash !== "#/app/overview") location.hash = "#/app/overview";
   }
   activeDashboardPage = page;
+  updateDashboardNavigation(page);
+  let session;
+  try {
+    session = await validateDashboardSession(token);
+    if (routeVersion !== dashboardLoadVersion) return;
+    role = session.role;
+    if (!["ADMIN", "USER"].includes(role)) throw new Error("The account role could not be verified.");
+    rememberValidatedSession(token, role);
+  } catch (error) {
+    if (routeVersion !== dashboardLoadVersion) return;
+    if (error.status === 401) { expireDashboardSession(); return; }
+    showDashboardSessionError(error, page);
+    return;
+  }
+  if (!dashboardPageAllowed(page, role)) {
+    page = "overview";
+    if (location.hash !== "#/app/overview") location.hash = "#/app/overview";
+  }
   if (page === "analytics" && !analyticsRange) analyticsRange = defaultAnalyticsRange();
-  app.innerHTML = dashboardShell(page);
-  wireDashboardActions();
+  activeDashboardPage = page;
+  const verifiedShell = document.querySelector(".app-shell");
+  if (!verifiedShell || !verifiedShell.classList.contains(role === "ADMIN" ? "workshop-app" : "customer-app")) {
+    app.innerHTML = dashboardShell(page);
+    wireDashboardActions();
+  } else updateDashboardNavigation(page);
+  const content = document.querySelector("#dashboard-content");
+  if (content) content.innerHTML = '<div class="dashboard-loading" role="status"><span class="spinner"></span><p>Loading this view…</p></div>';
   await loadDashboard();
 }
 
 function renderRoute() {
   dashboardLoadVersion++;
   document.querySelectorAll(".modal-backdrop").forEach(modal => modal.remove());
-  dashboardNavigationCleanup?.();
-  dashboardNavigationCleanup = null;
   const anchor = location.hash.replace(/^#/, "");
   if (anchor.startsWith("story-") && document.getElementById(anchor)) return;
+  const route = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
+  const isDashboardRoute = route[0] === "app";
+  if (!isDashboardRoute) {
+    dashboardNavigationCleanup?.();
+    dashboardNavigationCleanup = null;
+  }
   landingMenuCleanup?.();
   landingMenuCleanup = null;
   landingStoryCleanup?.();
   landingStoryCleanup = null;
   window.scrollTo({ top: 0, behavior: "auto" });
-  const route = location.hash.replace(/^#\/?/, "").split("/").filter(Boolean);
   if (route[0] === "login" || route[0] === "register") authPage(route[0]);
   else if (route[0] === "app") dashboard(route[1] || "overview");
   else {
