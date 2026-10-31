@@ -1,0 +1,75 @@
+/* Public narrative after the approved hero and service work order. */
+.marketing-shell .section-note { font-size: 13px; margin-bottom: 24px; }
+.marketing-shell .coordination-story, .marketing-shell .planning-story, .marketing-shell .visibility-story, .marketing-shell .history-story, .marketing-shell .benefit-story { padding: 100px max(var(--gutter-site), calc((100vw - var(--site-width))/2)); }
+.marketing-shell .coordination-story { background: #243d34; color: #f7f4ed; }
+.marketing-shell .coordination-story h2, .marketing-shell .planning-heading h2, .marketing-shell .visibility-heading h2, .marketing-shell .history-story h2 { font: 400 clamp(42px,5vw,72px)/1.03 Georgia,serif; letter-spacing: -.045em; max-width: 19ch; }
+.marketing-shell .coordination-story h2 em { color: #dfba8d; }
+.marketing-shell .coordination-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 10%; margin: 40px 0 56px; max-width: 900px; color: #d6dfd6; line-height: 1.8; }
+.marketing-shell .handoff-strip { display:flex; flex-wrap:wrap; border-top:1px solid #75877b; padding-top:24px; gap:24px 40px; }
+.marketing-shell .handoff-strip span:not(:last-child)::after {content:'↗'; margin-left:24px;color:#dfba8d}
+.marketing-shell .planning-story { background: #f7f4ed; }
+.marketing-shell .planning-heading { display:grid;grid-template-columns:1.2fr 1fr;gap:24px 12%;align-items:end; }
+.marketing-shell .planning-heading .section-note {grid-column:1/-1;margin:0}
+.marketing-shell .planning-heading em, .marketing-shell .visibility-heading em, .marketing-shell .history-story em {color:#a84630}
+.marketing-shell .planning-heading > p:last-child {color:#59645e;line-height:1.8;max-width:46ch}
+.marketing-shell .planning-example {margin-top:48px; background:#eee9df}
+.marketing-shell .example-caption {display:flex;flex-wrap:wrap;justify-content:space-between;gap:14px;padding:20px 28px;font-size:13px;}
+.marketing-shell .example-caption span {color:#59645e;font-size:12px}
+.marketing-shell .planning-line {display:grid;grid-template-columns:.55fr 1fr 1fr;gap:24px;padding:28px;align-items:center;border-top:1px solid #d5d1c7}
+.marketing-shell .planning-line > span {font-size:12px;font-weight:600}
+.marketing-shell .planning-line .priority-critical {color:#a6312b}
+.marketing-shell .planning-line strong {font-size:20px;font-weight:500}
+.marketing-shell .planning-line p {color:#59645e;font-size:13px;margin-top:5px}
+.marketing-shell .planning-selected {background:#e2e8db;border-left:3px solid #42664c;padding-left:25px}
+.marketing-shell .planning-explanation {padding:24px 28px;max-width:95ch;font-size:14px;line-height:1.7;color:#47564c}
+.marketing-shell .planning-principles {display:grid;grid-template-columns:repeat(3,1fr);gap:40px;margin-top:40px}
+.marketing-shell .planning-principles p {font-size:14px;line-height:1.7;color:#59645e}
+.marketing-shell .planning-principles strong {display:block;color:#19221f;margin-bottom:8px;font-weight:600}
+.marketing-shell .visibility-story {background:#e3ddd1}
+.marketing-shell .visibility-heading {display:flex;align-items:end;justify-content:space-between;gap:60px;margin-bottom:50px}
+.marketing-shell .visibility-heading > p {max-width:40ch;color:#59645e;line-height:1.8}
+.marketing-shell .operations-preview {display:grid;grid-template-columns:180px minmax(0,1fr);background:#fcfaf5;box-shadow:0 25px 40px -30px #19221f77}
+.marketing-shell .operations-preview aside {display:flex;flex-direction:column;gap:22px;padding:28px 20px;background:#243d34;color:#cbd5cc;font-size:13px}
+.marketing-shell .operations-preview aside strong {color:#fff;margin-bottom:24px;letter-spacing:.08em}
+.marketing-shell .operations-preview aside b {color:#f4d6b1;font-weight:500}
+.marketing-shell .preview-main {padding:12px 16px}
+.marketing-shell .preview-main .example-caption {padding:16px 12px}
+.marketing-shell .preview-job {display:flex;justify-content:space-between;gap:24px;padding:28px 12px;border-top:1px solid #dedbd2}
+.marketing-shell .preview-job small {color:#59645e;font-size:12px}
+.marketing-shell .preview-job strong {display:block;margin:8px 0;font-size:18px;font-weight:500}
+.marketing-shell .preview-job p,.marketing-shell .preview-job > span {font-size:12px;color:#59645e}
+.marketing-shell .preview-job > span {color:#355b41;white-space:nowrap}
+.marketing-shell .preview-resource {display:flex;flex-wrap:wrap;gap:20px;padding:24px 12px;background:#edf0e8;font-size:12px}
+.marketing-shell .preview-resource b {font-weight:500;margin-left:10px;color:#4c614f}
+.marketing-shell .preview-footnote {padding:20px 12px;font-size:12px;color:#59645e}
+.marketing-shell .history-story {display:grid;grid-template-columns:.85fr 1.15fr;gap:12%;background:#f7f4ed}
+.marketing-shell .history-story > div > p:last-child {margin-top:28px;max-width:38ch;line-height:1.8;color:#59645e}
+.marketing-shell .history-ledger {margin:0;padding:0;list-style:none;align-self:center}
+.marketing-shell .history-ledger li {display:grid;grid-template-columns:28px 1fr auto;gap:20px;padding:28px 0;border-top:1px solid #c9c4b9}
+.marketing-shell .history-ledger li > span {color:#a84630;font-size:12px}
+.marketing-shell .history-ledger strong {font-size:20px;font-weight:500}
+.marketing-shell .history-ledger p {margin-top:8px;color:#59645e;font-size:13px;line-height:1.7}
+.marketing-shell .history-ledger small {color:#59645e;font-size:11px}
+.marketing-shell .history-ledger .history-ledger-note {display:block;font-size:12px;color:#59645e}
+.marketing-shell.editorial-site .benefit-story {background:#eee9df}
+.marketing-shell .benefit-story > div {display:grid;grid-template-columns:repeat(3,1fr);gap:50px}
+.marketing-shell .benefit-story h3 {font:400 32px/1.1 Georgia,serif;letter-spacing:-.035em;color:#19221f}
+.marketing-shell .benefit-story article p {margin-top:20px;color:#59645e;font-size:14px;line-height:1.8}
+.marketing-shell .benefit-caveat {margin-top:40px;font-size:12px;color:#59645e}
+@media(max-width:760px) {
+ .marketing-shell .coordination-story, .marketing-shell .planning-story, .marketing-shell .visibility-story, .marketing-shell .history-story, .marketing-shell .benefit-story {padding-block:64px}
+ .marketing-shell .coordination-columns,.marketing-shell .planning-heading,.marketing-shell .history-story,.marketing-shell .benefit-story > div,.marketing-shell .planning-principles {grid-template-columns:1fr;gap:28px}
+ .marketing-shell .handoff-strip {flex-direction:column;gap:18px}
+ .marketing-shell .planning-line {grid-template-columns:1fr 1fr;gap:16px;padding:22px 18px}
+ .marketing-shell .planning-line > span {grid-column:1/-1}
+ .marketing-shell .planning-line strong {font-size:17px}
+ .marketing-shell .planning-selected {padding-left:15px}
+ .marketing-shell .example-caption,.marketing-shell .planning-explanation {padding-inline:18px}
+ .marketing-shell .visibility-heading {display:block}
+ .marketing-shell .visibility-heading > p {margin-top:26px}
+ .marketing-shell .operations-preview {grid-template-columns:1fr}
+ .marketing-shell .operations-preview aside {flex-direction:row;flex-wrap:wrap;gap:16px;padding:18px}
+ .marketing-shell .operations-preview aside strong {margin:0;width:100%}
+ .marketing-shell .preview-job {flex-direction:column;gap:12px}
+ .marketing-shell .history-ledger li {gap:12px}
+}

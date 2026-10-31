@@ -106,103 +106,124 @@ function brand(light = false) {
 let landingStoryCleanup = null;
 let landingMenuCleanup = null;
 
+// Isolated demonstration fixture: fields follow ServiceRequestStageResponse,
+// ResourceResponse, WaitTimeResponse and AssignmentSummaryResponse. Never sent to an API.
+function serviceWorkOrderPreview() {
+  const example = {
+    vehicle: { make: "Maruti Suzuki", model: "Swift", registrationNumber: "DEMO 014" },
+    request: { priority: "NORMAL", workflowStatus: "ACTIVE", stages: [
+      { sequenceNumber: 1, serviceTypeName: "Inspection", status: "COMPLETED", predictedServiceDuration: "PT20M", predictionSource: "DEFAULT_FALLBACK" },
+      { sequenceNumber: 2, serviceTypeName: "Brake service", status: "QUEUED", predictedServiceDuration: "PT35M", predictionSource: "DEFAULT_FALLBACK" },
+      { sequenceNumber: 3, serviceTypeName: "Final check", status: "PENDING", predictedServiceDuration: "PT10M", predictionSource: "DEFAULT_FALLBACK" }
+    ] },
+    resource: { name: "Brake bay", status: "BUSY", compatibleServiceTypes: [{ name: "Brake service" }] },
+    wait: { estimatedWaitMinutes: 12 },
+    completedAssignment: { assignmentStatus: "COMPLETED", actualServiceDuration: "PT18M" }
+  };
+  const current = example.request.stages[1];
+  return `<section class="work-order-story" id="story-work-order" aria-labelledby="work-order-heading">
+    <div class="work-order-introduction">
+      <p class="work-order-overline">From intake to handover</p>
+      <h2 id="work-order-heading">One vehicle.<br>A shared<br><em>plan of work.</em></h2>
+      <p>A service request becomes a sequence the whole workshop can follow. See what is done, what is waiting, and what can happen next.</p>
+      <div class="work-order-reading"><span aria-hidden="true">↳</span><p>Follow the second stage.<br><strong>The work is ready.<br>The compatible bay isn’t.</strong></p></div>
+      <p class="work-order-demo-note">Illustrative product view.<br>Demonstration data, not a live workshop.</p>
+    </div>
+    <article class="work-order-sheet" aria-label="Demonstration service work order">
+      <header class="work-order-masthead"><span>OPTISERVE / Service work order</span><span class="work-order-demo-tag">Demonstration</span></header>
+      <div class="work-order-vehicle"><div><p>Vehicle · ${escapeHtml(example.vehicle.registrationNumber)}</p><h3>${escapeHtml(example.vehicle.make)}<br><strong>${escapeHtml(example.vehicle.model)}</strong></h3></div><div class="work-order-request"><span>Service request</span><strong>Example 014</strong><span class="work-order-priority">${escapeHtml(example.request.priority)} priority</span></div></div>
+      <div class="work-order-progress"><span>Ordered service stages</span><span>1 of 3 completed · Workflow active</span></div>
+      <ol class="work-order-stages">${example.request.stages.map((stage, index) => `<li class="work-order-stage work-order-stage-${stage.status.toLowerCase()}" ${stage.status === "QUEUED" ? 'aria-current="step"' : ""}><span class="work-order-sequence">${String(stage.sequenceNumber).padStart(2, "0")}</span><div><strong>${escapeHtml(stage.serviceTypeName)}</strong><span>${index === 0 ? "Actual " + serviceDurationLabel(example.completedAssignment.actualServiceDuration) + " · estimate " + serviceDurationLabel(stage.predictedServiceDuration) : index === 1 ? "Current stage · waiting for a compatible resource" : "Becomes eligible after brake service"}</span></div><span class="work-order-state">${stage.status === "COMPLETED" ? "✓ Completed" : stage.status === "QUEUED" ? "Queued" : "Pending"}</span></li>`).join("")}</ol>
+      <div class="work-order-decision"><div class="work-order-resource"><span>Compatible resource</span><strong>${escapeHtml(example.resource.name)} <small>Busy</small></strong><p>Configured for ${escapeHtml(example.resource.compatibleServiceTypes[0].name.toLowerCase())}. No resource assigned to this stage yet.</p></div><dl class="work-order-times"><div><dt>Estimated service</dt><dd>${serviceDurationLabel(current.predictedServiceDuration)}</dd><dd class="work-order-time-source">Service-type default</dd></div><div><dt>Estimated wait</dt><dd>${example.wait.estimatedWaitMinutes} min</dd><dd class="work-order-time-source">Illustrative queue estimate</dd></div></dl></div>
+      <footer class="work-order-foot"><span class="work-order-foot-mark" aria-hidden="true">↳</span><p><strong>Next: assign a compatible available resource.</strong> Brake service remains queued. The final check stays pending until brake service is completed.</p></footer>
+    </article>
+  </section>`;
+}
+
 function landing() {
   app.innerHTML = `
-    <div class="marketing-shell story-shell">
+    <div class="marketing-shell editorial-site">
       <div class="story-scroll-meter" aria-hidden="true"><span></span></div>
       <header class="story-header wrap">
         ${brand()}
         <button class="mobile-menu" aria-label="Open navigation" aria-controls="story-nav" aria-expanded="false">${icon("menu")}</button>
         <nav class="story-nav" id="story-nav" aria-label="Main navigation" inert>
-          <a href="#story-system">The operation</a><a href="#story-workflow">Service journey</a><a href="#story-queue">Queue intelligence</a><a href="#story-resources">Resources</a><a href="#story-product">Platform</a><a href="#/login">Sign in</a><a class="story-menu-cta" href="#/register">Create account ${icon("arrow", 15)}</a>
+          <a href="#story-workflow">How it works</a>
+          <a href="#story-queue">Queue planning</a>
+          <a href="#story-resources">Workshop fit</a>
+          <a href="#story-platform">Platform</a>
+          <a href="#/login">Sign in</a>
+          <a class="story-menu-cta" href="#/register">Customer access ${icon("arrow", 15)}</a>
         </nav>
       </header>
+
       <main id="main" class="story-main">
-        <section class="story-hero">
-          <picture class="story-hero-media" aria-hidden="true"><img src="/assets/workshop-hero.png" alt="" fetchpriority="high" decoding="async"></picture>
-          <div class="story-hero-grid" aria-hidden="true"></div>
-          <div class="story-hero-copy wrap">
-            <div class="story-overline" data-reveal><i></i> INTELLIGENT AUTOMOTIVE OPERATIONS <span>— 01</span></div>
-            <h1 data-reveal>Your workshop.<br><em>In sync.</em></h1>
-            <p data-reveal>Bring requests, queue decisions, and compatible resources into one clear service operation.</p>
-            <div class="story-actions" data-reveal><a class="story-cta" href="#/register">Explore the platform ${icon("arrow", 16)}</a><a class="story-text-link" href="#story-workflow">See how it works <span>↓</span></a></div>
-          </div>
-          <div class="story-hero-coordinates" aria-hidden="true"><span>WORKSHOP SYSTEMS / 01</span><i></i><span>VEHICLE → SERVICE → RESOURCE</span></div>
-          <a class="story-scroll-cue" href="#story-system"><span>SCROLL TO EXPLORE</span><i></i></a>
-        </section>
-        <section class="story-system" id="story-system">
-          <div class="wrap system-intro">
-            <div class="story-section-index" data-reveal><span>01 / THE OPERATION</span><i></i></div>
-            <div class="system-statement" data-reveal><p class="story-kicker">EVERY BAY IS CONNECTED TO THE NEXT DECISION</p><h2>Good service needs<br>a <em>clear chain of work.</em></h2><p class="story-body">A customer request becomes a set of service stages. Each stage meets a priority-aware queue and configured resource compatibility. The team sees what is waiting, what can move, and what needs a handoff.</p></div>
-          </div>
-          <div class="system-rail" aria-label="How OPTISERVE connects workshop operations"><div class="wrap system-rail-inner">
-            <div class="system-rail-head"><span>FROM CUSTOMER REQUEST</span><i></i><span>TO WORKSHOP ASSIGNMENT</span></div>
-            <div class="system-rail-flow"><div><small>01 / INTAKE</small><strong>Vehicle<br>+ services</strong><span>Customer request</span></div><b aria-hidden="true">→</b><div><small>02 / QUEUE</small><strong>Priority<br>+ eligibility</strong><span>Backend scheduler</span></div><b aria-hidden="true">→</b><div><small>03 / MATCH</small><strong>Service<br>+ capability</strong><span>Configured resources</span></div><b aria-hidden="true">→</b><div><small>04 / HANDOFF</small><strong>Assigned<br>+ in service</strong><span>Workflow stage</span></div></div>
-          </div></div>
-        </section>
-        <section class="story-showcase" id="story-product">
-          <div class="wrap"><div class="story-showcase-heading" data-reveal><div class="story-section-index"><span>02 / THE PRODUCT</span><i></i></div><p class="story-kicker">A WORKING VIEW, NOT A PRETTY REPORT</p><h2>Operations at<br><em>a glance.</em></h2><p class="story-body">Customer and workshop screens use live API responses after sign-in. Preview the shape of the experience below; the sample entries are illustrative.</p></div>
-            <div class="story-product-frame" data-reveal><div class="story-product-top"><div class="story-product-brand">${brand(true)}<span>OPTISERVE / WORKSHOP</span></div><div class="story-product-actions"><span>PRODUCT PREVIEW / SAMPLE RECORDS</span><i></i><i></i><i></i></div></div><div class="story-product-body"><aside class="story-product-sidebar"><span class="sidebar-logo">O</span><button class="product-tab selected" type="button" aria-selected="true" data-product-view="queue">Queue</button><button class="product-tab" type="button" aria-selected="false" data-product-view="requests">Requests</button><button class="product-tab" type="button" aria-selected="false" data-product-view="resources">Resources</button><span class="product-sidebar-rule"></span><small>WORKSHOP ADMIN</small></aside><div class="story-product-main">
-              <section class="product-view-panel is-active" data-view="queue"><div class="story-product-title"><div><small>OPERATIONS / PRIORITY QUEUE</small><h3>Workshop queue</h3></div><span class="sample-pill">ILLUSTRATIVE DATA</span></div><div class="product-summary-line"><span>Queue order follows backend scheduling rules.</span><span>Waiting time is calculated from current state.</span></div><div class="story-product-table"><div class="product-table-head"><span>SERVICE / VEHICLE</span><span>PRIORITY</span><span>STAGE</span><span>WAIT</span></div><div><span class="product-service-cell"><i class="product-table-dot"></i><b>Brake inspection</b><small>Vehicle sample 01</small></span><span class="product-status critical">CRITICAL</span><span>ELIGIBLE</span><span>Dynamic</span></div><div><span class="product-service-cell"><i class="product-table-dot dot-muted"></i><b>Oil service</b><small>Vehicle sample 02</small></span><span class="product-status">NORMAL</span><span>WAITING</span><span>Dynamic</span></div></div></section>
-              <section class="product-view-panel" data-view="requests" hidden><div class="story-product-title"><div><small>WORKFLOW / SERVICE REQUESTS</small><h3>Requests in progress</h3></div><span class="sample-pill">ILLUSTRATIVE DATA</span></div><div class="product-summary-line"><span>Stage progress and request state from the service workflow.</span></div><div class="story-product-table"><div class="product-table-head"><span>VEHICLE / SERVICE</span><span>STAGE</span><span>REQUEST</span><span>APPOINTMENT</span></div><div><span class="product-service-cell"><i class="product-table-dot"></i><b>Vehicle sample 01</b><small>Oil service</small></span><span>IN PROGRESS</span><span class="product-status">ASSIGNED</span><span>—</span></div><div><span class="product-service-cell"><i class="product-table-dot dot-muted"></i><b>Vehicle sample 02</b><small>Inspection</small></span><span>UP NEXT</span><span class="product-status">WAITING</span><span>—</span></div></div></section>
-              <section class="product-view-panel" data-view="resources" hidden><div class="story-product-title"><div><small>CAPACITY / COMPATIBILITY</small><h3>Resources</h3></div><span class="sample-pill">ILLUSTRATIVE DATA</span></div><div class="product-summary-line"><span>Compatibility is configured by an administrator.</span></div><div class="product-resource-preview"><article><span>RESOURCE / SAMPLE</span><strong>Workshop lift</strong><small>Compatible service types · availability checked during assignment</small><i>AVAILABLE</i></article><article><span>RESOURCE / SAMPLE</span><strong>Inspection bay</strong><small>Compatible service types · availability checked during assignment</small><i>BUSY</i></article><article><span>RESOURCE / SAMPLE</span><strong>Alignment station</strong><small>Compatible service types · availability checked during assignment</small><i>AVAILABLE</i></article></div></section>
-            </div></div><div class="story-product-bottom"><span>ACTUAL REQUESTS, QUEUE, AND RESOURCES REQUIRE SIGN-IN</span><a href="#/login">Open OPTISERVE ${icon("arrow", 14)}</a></div></div>
-          </div>
-        </section>
-        <section class="story-workflow" id="story-workflow">
-          <div class="wrap story-workflow-head"><div class="story-section-index" data-reveal><span>03 / THE ORCHESTRATION</span><i></i></div><div class="workflow-heading-copy" data-reveal><p class="story-kicker">THE QUEUE MOVES. THE VIEW MOVES WITH IT.</p><h2>Five moments.<br><em>One service operation.</em></h2><p class="story-body">Scroll through a workshop request from intake to completion. The active operational view follows your position through the sequence.</p></div></div>
-          <div class="story-workflow-layout wrap">
-            <div class="story-workflow-visual" aria-live="polite" aria-atomic="true"><div class="story-workflow-visual-inner" id="workflow-visual" data-mode="request">
-              <div class="workflow-visual-top"><span>OPTISERVE / WORKFLOW</span><span><b id="workflow-active-number">01</b> — 05</span></div>
-              <div class="workflow-route" aria-hidden="true"><svg viewBox="0 0 600 170" preserveAspectRatio="none"><path class="route-base" d="M28 123 C108 123 108 40 190 40 S270 123 350 123 432 40 512 40 552 84 572 84"/><path class="route-progress" d="M28 123 C108 123 108 40 190 40 S270 123 350 123 432 40 512 40 552 84 572 84" pathLength="100"/></svg><div class="route-node node-1"><i></i><span>REQUEST</span></div><div class="route-node node-2"><i></i><span>PRIORITY</span></div><div class="route-node node-3"><i></i><span>RESOURCE</span></div><div class="route-node node-4"><i></i><span>IN SERVICE</span></div><div class="route-node node-5"><i></i><span>COMPLETE</span></div><div class="route-vehicle">${icon("wrench", 22)}</div></div>
-              <div class="workflow-active-copy"><small id="workflow-active-label">REQUEST / RECEIVED</small><h3 id="workflow-active-title">Request received</h3><p id="workflow-active-caption">A customer selects a vehicle and the service types needed for the visit.</p></div>
-              <div class="workflow-visual-foot"><span>SCROLL POSITION / LIVE</span><span id="workflow-active-step">01 / 05</span></div>
-            </div></div>
-            <div class="story-stage-list" aria-label="OPTISERVE service operation steps">
-              <button type="button" class="story-stage is-active" aria-current="step" data-stage="01" data-mode="request" data-label="REQUEST / RECEIVED" data-title="Request received" data-caption="A customer selects a vehicle and the service types needed for the visit."><span>01</span><span class="stage-copy"><strong>Request received</strong><small>Vehicle, selected services, and appointment details enter one request.</small></span><span class="stage-tag">INTAKE</span></button>
-              <button type="button" class="story-stage" data-stage="02" data-mode="priority" data-label="QUEUE / PRIORITIZED" data-title="Priority in context" data-caption="Priority, eligibility, and time in queue inform the next scheduling decision."><span>02</span><span class="stage-copy"><strong>Priority in context</strong><small>The scheduler weighs priority, eligible work, and queue aging.</small></span><span class="stage-tag">SCHEDULING</span></button>
-              <button type="button" class="story-stage" data-stage="03" data-mode="resource" data-label="RESOURCE / COMPATIBLE" data-title="Capability matched" data-caption="The assignment flow checks configured compatibility and resource availability."><span>03</span><span class="stage-copy"><strong>Capability matched</strong><small>Configured service compatibility shapes which resources can be assigned.</small></span><span class="stage-tag">ASSIGNMENT</span></button>
-              <button type="button" class="story-stage" data-stage="04" data-mode="service" data-label="WORKFLOW / IN SERVICE" data-title="Service in progress" data-caption="The assigned stage advances through the existing workshop workflow."><span>04</span><span class="stage-copy"><strong>Service in progress</strong><small>Assignment and stage state stay visible to the workshop team.</small></span><span class="stage-tag">WORKFLOW</span></button>
-              <button type="button" class="story-stage" data-stage="05" data-mode="complete" data-label="WORKFLOW / COMPLETED" data-title="Completed and ready" data-caption="Completion closes the stage and updates the request for the customer."><span>05</span><span class="stage-copy"><strong>Completed and ready</strong><small>The team records completion; the customer can follow the request.</small></span><span class="stage-tag">HANDOFF</span></button>
+        <section class="editorial-hero">
+          <div class="editorial-hero-copy">
+            <p class="editorial-eyebrow"><span></span> Service coordination for workshops</p>
+            <h1>Every service.<br>Every stage.<br><em>In good order.</em></h1>
+            <p class="editorial-lead">Coordinate service requests, ordered stages and waiting work. Match each stage to a compatible workshop resource, from intake through completion.</p>
+            <div class="editorial-actions">
+              <a class="editorial-button" href="#story-work-order">Follow a work order ${icon("arrow", 16)}</a>
+              <a class="editorial-link" href="#/login">Workshop sign in <span aria-hidden="true">↗</span></a>
             </div>
+            <p class="editorial-note">For workshop owners, managers and the people keeping work moving.</p>
+          </div>
+          <figure class="editorial-hero-image">
+            <picture class="story-hero-media">
+              <img src="/assets/workshop-documentary.jpg" alt="A mechanic working at an open car engine in a garage" fetchpriority="high" decoding="async">
+            </picture>
+            <figcaption><span>01</span><span>The craft behind every service</span><small class="editorial-photo-credit">Photo by <a href="https://commons.wikimedia.org/wiki/File:Car_repair_takes_place_inside_a_garage_with_a_person_working_on_the_engine_in_a_rural_setting.jpg" target="_blank" rel="noreferrer">Nenad Stojković</a> · <a href="https://creativecommons.org/licenses/by/2.0/" target="_blank" rel="noreferrer">CC BY 2.0</a></small></figcaption>
+          </figure>
+          <div class="editorial-hero-index" aria-hidden="true">OPTISERVE / 2026</div>
+        </section>
+
+        ${serviceWorkOrderPreview()}
+
+        <section class="coordination-story" id="story-platform">
+          <p class="section-note">The work between the work</p><h2>A busy workshop.<br><em>One shared picture.</em></h2>
+          <div class="coordination-columns"><p>A request at the desk. A vehicle waiting outside. A bay finishing another job. Good service depends on the handoffs between them.</p><p>OPTISERVE connects the request, its ordered stages and the workshop’s resources. Customers follow progress. The team sees the next action.</p></div>
+          <div class="handoff-strip"><span>Customer request</span><span>Ordered stages</span><span>Compatible resource</span><span>Recorded completion</span></div>
+        </section>
+        <section class="planning-story" id="story-queue">
+          <div class="planning-heading"><p class="section-note">Intelligent queue planning</p><h2>Priority matters.<br><em>So does the right bay.</em></h2><p>Critical work gets first consideration. Compatibility and availability determine what can actually start. Work already in progress is never interrupted.</p></div>
+          <div class="planning-example" aria-label="Illustrative scheduling example"><div class="example-caption"><strong>A workshop decision</strong><span>Demonstration · not a live queue</span></div>
+            <div class="planning-line"><span class="priority-critical">CRITICAL</span><div><strong>Brake repair</strong><p>Needs the brake bay</p></div><div><strong>Bay busy</strong><p>Remains queued</p></div></div>
+            <div class="planning-line planning-selected"><span>NORMAL</span><div><strong>Oil change</strong><p>Compatible with the service bay</p></div><div><strong>Bay available</strong><p>Can be assigned</p></div></div>
+            <p class="planning-explanation">The oil change can proceed on a different compatible resource. The critical request keeps its queue history and takes precedence when a compatible resource becomes available.</p>
+          </div>
+          <div class="planning-principles"><p><strong>Four priority classes</strong>Critical, urgent, appointment and normal.</p><p><strong>Waiting has weight</strong>Aging, due appointments and a bounded duration bonus contribute to ranking.</p><p><strong>Two separate estimates</strong>Service duration describes the work. Waiting time reflects current queue and resource state.</p></div>
+        </section>
+        <section class="visibility-story" id="story-resources"><div class="visibility-heading"><div><p class="section-note">The workshop, in view</p><h2>Know what needs<br><em>your attention.</em></h2></div><p>Start assigned work. Record its completion. Keep resource compatibility and availability visible alongside the work that depends on them.</p></div>
+          <div class="operations-preview" role="region" aria-label="Demonstration workshop interface"><aside><strong>OPTISERVE</strong><span>Overview</span><b>Active work</b><span>Requests</span><span>Resources</span></aside><div class="preview-main"><div class="example-caption"><strong>Active work</strong><span>Illustrative interface · demonstration data</span></div><div class="preview-job"><div><small>DEMO 014 / Inspection</small><strong>Recorded and ready for the next stage.</strong><p>Inspection completed · actual 18 min · estimated 20 min</p></div><span>Completed</span></div><div class="preview-job"><div><small>DEMO 022 / Oil change</small><strong>Service bay · work underway</strong><p>Actual duration will be recorded at completion.</p></div><span>In progress</span></div><div class="preview-resource"><span>Brake bay <b>Busy</b></span><span>Service bay <b>Busy</b></span><span>Inspection bay <b>Available</b></span></div><p class="preview-footnote">A product illustration, not an interactive control panel. Sign in to operate your configured workshop.</p></div></div>
+        </section>
+        <section class="history-story" id="story-workflow"><div><p class="section-note">A service record that carries forward</p><h2>The next stage<br>starts with<br><em>a clear handoff.</em></h2><p>A completed assignment records its actual duration. The immediate next stage becomes eligible. The request finishes when the final stage is complete.</p></div><ol class="history-ledger"><li><span>01</span><div><strong>Inspection completed</strong><p>18 min actual / 20 min estimated</p></div><small>Recorded</small></li><li><span>02</span><div><strong>Brake service ready</strong><p>Eligible to queue, then match to a compatible resource</p></div><small>Next</small></li><li><span>03</span><div><strong>Final check pending</strong><p>Waits for the preceding stage to finish</p></div><small>Later</small></li><li class="history-ledger-note">Illustrative handoff · stages remain ordered</li></ol></section>
+        <section class="benefit-story editorial-proof"><p class="section-note">Built for the day-to-day</p><div><article><h3>Fewer blind handoffs.</h3><p>See each request’s stages, assignment and recorded completion in one connected service record.</p></article><article><h3>Resources with a purpose.</h3><p>Configure service compatibility and see available, busy and offline workshop resources.</p></article><article><h3>Estimates with context.</h3><p>See the recorded estimate source and actual duration. The ML service predicts service duration only. Waiting time is calculated separately.</p></article></div><p class="benefit-caveat">Duration prediction currently uses a model trained on synthetic data. No real-world accuracy or time-saving claim is implied.</p></section>
+
+        <section class="editorial-faq" id="story-faq">
+          <div class="editorial-faq-intro" data-reveal><p class="editorial-eyebrow"><span></span> Good to know</p><h2>Clear answers<br><em>for the workshop.</em></h2></div>
+          <div class="faq-list">
+            <details><summary>How is waiting time calculated?<span aria-hidden="true">+</span></summary><p>The backend estimates waiting time from the current queue and resource state. The ML service predicts service duration only.</p></details>
+            <details><summary>What does the service duration show?<span aria-hidden="true">+</span></summary><p>Each stage keeps its estimate and source. Administrators can distinguish a valid ML prediction from the configured default fallback; actual duration appears after completion.</p></details>
+            <details><summary>Who manages service types and resources?<span aria-hidden="true">+</span></summary><p>Workshop administrators configure service types, resource compatibility, and operating mode. Public registration creates customer accounts only.</p></details>
+            <details><summary>Can workshop operations run automatically?<span aria-hidden="true">+</span></summary><p>Administrators can choose MANUAL or AUTO. New deployments default to MANUAL, and the existing scheduler still applies priority and compatibility rules.</p></details>
           </div>
         </section>
-        <section class="story-queue" id="story-queue">
-          <div class="wrap story-queue-layout">
-            <div class="story-queue-copy" data-reveal><div class="story-section-index"><span>04 / QUEUE INTELLIGENCE</span><i></i></div><p class="story-kicker">ORDER WITH CONTEXT</p><h2>Priority is a rule.<br><em>Waiting is a process.</em></h2><p class="story-body">OPTISERVE’s hybrid scheduler uses priority classes, stage eligibility, queue aging, and defined tie-break rules. The waiting estimate is recalculated separately from current queue and resource state.</p><a class="story-text-link" href="#story-product">Explore the workshop view <span>↘</span></a></div>
-            <div class="story-queue-scene" data-reveal><div class="queue-console"><div class="queue-console-head"><div><span>WORKSHOP / QUEUE</span><strong>Service stages</strong></div><span class="demo-flag">ILLUSTRATIVE DATA</span></div><div class="queue-console-columns"><span>POSITION / SERVICE</span><span>PRIORITY</span><span>STAGE</span></div>
-              <article class="story-queue-card queue-card-priority"><span class="story-queue-position">01</span><div><strong>Brake inspection</strong><small>Vehicle sample 01</small></div><span class="priority-chip critical">CRITICAL</span><span class="stage-chip">ELIGIBLE</span></article>
-              <article class="story-queue-card"><span class="story-queue-position">02</span><div><strong>Oil service</strong><small>Vehicle sample 02</small></div><span class="priority-chip appointment">APPOINTMENT</span><span class="stage-chip">WAITING</span></article>
-              <article class="story-queue-card"><span class="story-queue-position">03</span><div><strong>Vehicle inspection</strong><small>Vehicle sample 03</small></div><span class="priority-chip">NORMAL</span><span class="stage-chip">PENDING</span></article>
-              <div class="queue-console-foot"><span><i></i> Sequence shown for illustration</span><span>WAIT ESTIMATE / BACKEND-CALCULATED</span></div>
-            </div><div class="queue-console-orbit" aria-hidden="true"></div></div>
-          </div>
+
+        <section class="editorial-end" data-reveal>
+          <div class="editorial-end-top"><p class="editorial-eyebrow"><span></span> OPTISERVE / Workshop operations</p><span>From request to ready</span></div>
+          <h2>Your next<br><em>clear handoff.</em></h2>
+          <div class="editorial-end-bottom"><p>Already have workshop access? Sign in to your operations workspace. Vehicle owners can create a customer account. Workshop administrator access is provisioned separately.</p><div class="editorial-actions"><a class="editorial-button" href="#/login">Sign in to OPTISERVE ${icon("arrow", 16)}</a><a class="editorial-link" href="#/register">Create a customer account <span aria-hidden="true">↗</span></a></div></div>
         </section>
-        <section class="story-resources" id="story-resources">
-          <div class="wrap story-resource-layout"><div class="story-resource-copy" data-reveal><div class="story-section-index"><span>05 / RESOURCE ORCHESTRATION</span><i></i></div><p class="story-kicker">A MATCH IS CONFIGURED, THEN CHECKED</p><h2>Service type<br>meets <em>capability.</em></h2><p class="story-body">An administrator connects resources to compatible service types. At assignment time, OPTISERVE checks that configuration and current availability; the server owns the assignment decision.</p><p class="resource-honesty">CONCEPTUAL DIAGRAM / NOT LIVE RESOURCE STATUS</p></div>
-            <div class="story-resource-map" data-reveal><div class="resource-map-label">COMPATIBILITY PATH / WORKSHOP CONFIGURATION</div><div class="resource-map-service"><span class="map-node-icon">${icon("layers", 19)}</span><div><small>SERVICE TYPE</small><strong>Configured service</strong></div></div><svg class="resource-connectors" viewBox="0 0 500 320" preserveAspectRatio="none" aria-hidden="true"><path class="connector connector-active" d="M130 65 C250 65 230 158 370 158"/><path class="connector" d="M130 65 C250 65 230 255 370 255"/><path class="connector connector-muted" d="M130 65 C250 65 230 62 370 62"/></svg><div class="resource-map-bay bay-compatible"><span class="bay-led"></span><div><small>COMPATIBILITY / SET BY ADMIN</small><strong>Workshop resource</strong></div><span class="bay-status">MATCH</span></div><div class="resource-map-bay"><span class="bay-led"></span><div><small>AVAILABILITY / CHECKED AT ASSIGNMENT</small><strong>Workshop resource</strong></div><span class="bay-status">CHECK</span></div><div class="resource-map-bay bay-unavailable"><span class="bay-led"></span><div><small>INCOMPATIBLE SERVICE TYPE</small><strong>Excluded from match</strong></div><span class="bay-status">SKIP</span></div><div class="resource-map-note">Names and states above are illustrative. Actual resources load from the workshop API.</div></div></div>
-        </section>
-        <section class="story-intelligence" id="story-intelligence">
-          <div class="wrap"><div class="story-intel-heading" data-reveal><div class="story-section-index"><span>06 / DURATION &amp; WAIT</span><i></i></div><p class="story-kicker">TWO CLOCKS. TWO DIFFERENT JOBS.</p><h2>Plan the work.<br><em>Recalculate the wait.</em></h2></div>
-            <div class="intelligence-ledger" data-reveal><div class="intelligence-row"><span class="ledger-index">01</span><div><small>SERVICE DURATION / CURRENT BACKEND</small><h3>Service type default</h3><p>A deterministic duration comes from the configured service type. The separate FastAPI model is not connected to this Spring Boot runtime.</p></div><span class="ledger-state">ACTIVE</span></div><div class="intelligence-row ledger-planned"><span class="ledger-index">02</span><div><small>ML SERVICE / SEPARATE PROJECT</small><h3>Duration prediction</h3><p>The FastAPI predictor exists as a separate service; the current backend does not call it. No ML prediction is shown as live here.</p></div><span class="ledger-state">NOT INTEGRATED</span></div><div class="intelligence-row ledger-live"><span class="ledger-index">03</span><div><small>WAITING TIME / BACKEND CALCULATION</small><h3>Dynamic estimate</h3><p>The backend recalculates estimated wait from current queue and resource availability.</p></div><span class="ledger-state">OPERATIONAL</span></div></div>
-          </div>
-        </section>
-        <section class="story-feature-scrub" id="story-features" aria-label="Workshop product features">
-          <div class="story-feature-pin">
-            <div class="wrap story-feature-heading"><div class="story-section-index"><span>07 / THE WORKSHOP VIEW</span><i></i></div><div><p class="story-kicker">ONE OPERATION, SEEN FROM EVERY ANGLE</p><h2>Built for the<br><em>next decision.</em></h2></div></div>
-            <div class="story-feature-viewport"><div class="story-feature-track">
-              <article class="story-feature-panel feature-queue-panel"><div class="feature-panel-meta"><span>01 / QUEUE</span><span>ILLUSTRATIVE VIEW</span></div><div class="feature-panel-copy"><small>PRIORITY, ELIGIBILITY, AGING</small><h3>See what<br>can move.</h3><p>Queue order follows the backend scheduler and current workflow state.</p></div><div class="feature-queue-visual"><div class="feature-queue-top"><span>WORKSHOP QUEUE</span><b>03 STAGES</b></div><div class="feature-queue-row active"><i>01</i><span><b>Brake inspection</b><small>CRITICAL · ELIGIBLE</small></span><em>READY</em></div><div class="feature-queue-row"><i>02</i><span><b>Oil service</b><small>NORMAL · WAITING</small></span><em>IN LINE</em></div><div class="feature-queue-row"><i>03</i><span><b>Vehicle inspection</b><small>APPOINTMENT · PENDING</small></span><em>UP NEXT</em></div></div><div class="feature-panel-index">01 <span>—</span> 04</div></article>
-              <article class="story-feature-panel feature-resource-panel"><div class="feature-panel-meta"><span>02 / CAPABILITY</span><span>ILLUSTRATIVE VIEW</span></div><div class="feature-panel-copy"><small>COMPATIBILITY BEFORE ASSIGNMENT</small><h3>Match the<br>work to the bay.</h3><p>Configured service compatibility shapes eligible resource assignment.</p></div><div class="feature-resource-visual"><div class="feature-service-node"><small>SERVICE TYPE</small><b>Brake inspection</b></div><div class="feature-links"><i></i><i></i><i></i></div><div class="feature-bays"><span class="match"><i></i><b>Inspection bay</b><small>COMPATIBLE</small></span><span><i></i><b>General lift</b><small>AVAILABLE</small></span><span class="unmatched"><i></i><b>Paint booth</b><small>NOT COMPATIBLE</small></span></div></div><div class="feature-panel-index">02 <span>—</span> 04</div></article>
-              <article class="story-feature-panel feature-stage-panel"><div class="feature-panel-meta"><span>03 / SERVICE STAGE</span><span>ILLUSTRATIVE VIEW</span></div><div class="feature-panel-copy"><small>ONE REQUEST, CLEAR HANDOFFS</small><h3>Keep each<br>stage in view.</h3><p>Follow the workflow from a pending stage through assignment and completion.</p></div><div class="feature-stage-visual"><div class="feature-stage-path"><span class="done"><i>${icon("check", 14)}</i><b>Request</b><small>RECEIVED</small></span><span class="done"><i>${icon("check", 14)}</i><b>Queue</b><small>PRIORITIZED</small></span><span class="current"><i>03</i><b>Assignment</b><small>RESOURCE MATCH</small></span><span><i>04</i><b>Service</b><small>IN PROGRESS</small></span><span><i>05</i><b>Complete</b><small>READY</small></span></div></div><div class="feature-panel-index">03 <span>—</span> 04</div></article>
-              <article class="story-feature-panel feature-wait-panel"><div class="feature-panel-meta"><span>04 / WAIT ESTIMATE</span><span>ILLUSTRATIVE VIEW</span></div><div class="feature-panel-copy"><small>A LIVE WORKSHOP CALCULATION</small><h3>Keep the wait<br>in context.</h3><p>The backend recalculates waiting estimates from current queue and resource state.</p></div><div class="feature-wait-visual"><div class="wait-estimate-label">WAITING ESTIMATE <span>BACKEND-CALCULATED</span></div><div class="wait-dial"><div><small>EXAMPLE</small><strong>—</strong><span>No live value shown</span></div></div><div class="wait-factors"><span>QUEUE ORDER <i></i></span><span>RESOURCE STATE <i></i></span><span>SERVICE TYPE DEFAULT <i></i></span></div></div><div class="feature-panel-index">04 <span>—</span> 04</div></article>
-            </div></div>
-            <div class="story-feature-controls wrap"><span>SCROLL TO EXPLORE</span><div role="group" aria-label="Choose workshop feature">${[0, 1, 2, 3].map((index) => `<button type="button" data-feature-index="${index}" aria-label="Show feature ${index + 1}" aria-current="${index === 0 ? "step" : "false"}">0${index + 1}</button>`).join("")}</div></div>
-          </div>
-        </section>
-        <section class="story-final"><div class="story-final-grid" aria-hidden="true"></div><div class="wrap story-final-inner" data-reveal><div class="story-section-index"><span>08 / YOUR WORKSHOP</span><i></i></div><p class="story-kicker">FROM REQUEST TO READY</p><h2>Make every<br>handoff <em>clear.</em></h2><p>Sign in to follow customer requests or coordinate the workshop from one shared operating view.</p><div class="story-actions"><a class="story-cta" href="#/register">Create a customer account ${icon("arrow", 16)}</a><a class="story-text-link" href="#/login">Workshop admin? Sign in <span>↗</span></a></div></div></section>
       </main>
-      <footer class="story-footer wrap"><div>${brand()}<p>Clearer workshop operations,<br>from intake through handoff.</p></div><nav class="story-footer-links" aria-label="Footer"><a href="#story-workflow">Orchestration</a><a href="#story-product">Platform</a><a href="#/login">Sign in</a></nav><span>© ${new Date().getFullYear()} OPTISERVE</span></footer>
+
+      <footer class="editorial-footer wrap">
+        <div>${brand()}<p>Clearer workshop operations,<br>from intake through handoff.</p></div>
+        <nav aria-label="Footer"><a href="#story-workflow">Service journey</a><a href="#story-queue">Queue planning</a><a href="#story-faq">Questions</a><a href="#/login">Sign in</a></nav>
+        <span>© ${new Date().getFullYear()} OPTISERVE</span>
+      </footer>
     </div>`;
+
   const menuButton = document.querySelector(".mobile-menu");
   const nav = document.querySelector(".story-nav");
   const setMenuOpen = (open, returnFocus = false) => {
@@ -231,19 +252,6 @@ function landing() {
     navLinks.forEach((link) => link.removeEventListener("click", onNavLinkClick));
   };
   document.querySelector(".story-hero-media img")?.addEventListener("error", (event) => event.currentTarget.closest("picture")?.classList.add("media-unavailable"), { once: true });
-  document.querySelectorAll("[data-product-view]").forEach((button) => button.addEventListener("click", () => {
-    const selected = button.dataset.productView;
-    document.querySelectorAll("[data-product-view]").forEach((tab) => {
-      const isSelected = tab === button;
-      tab.classList.toggle("selected", isSelected);
-      tab.setAttribute("aria-selected", String(isSelected));
-    });
-    document.querySelectorAll("[data-view]").forEach((panel) => {
-      const isSelected = panel.dataset.view === selected;
-      panel.hidden = !isSelected;
-      panel.classList.toggle("is-active", isSelected);
-    });
-  }));
   initLandingStoryMotion();
 }
 
@@ -394,7 +402,7 @@ function initLandingStoryMotion() {
 function authPage(mode = "login") {
   const registering = mode === "register";
   let registrationTokenReady = false;
-  app.innerHTML = `<main id="main" class="auth-shell"><a class="auth-back" href="/">← Back to OPTISERVE</a><section class="auth-panel"><div class="auth-brand">${brand()}</div><div class="eyebrow"><span class="eyebrow-dot"></span> WORKSHOP OPERATIONS</div><h1>${registering ? "Start with a" : "Welcome"}<br><em>${registering ? "clearer view." : "back."}</em></h1><p class="auth-intro">${registering ? "Create an operations account to explore the OPTISERVE workspace." : "Sign in to your OPTISERVE operations workspace."}</p>
+  app.innerHTML = `<main id="main" class="auth-shell"><a class="auth-back" href="/">← Back to OPTISERVE</a><section class="auth-panel"><div class="auth-brand">${brand()}</div><div class="eyebrow"><span class="eyebrow-dot"></span> WORKSHOP OPERATIONS</div><h1>${registering ? "Start with a" : "Welcome"}<br>${registering ? "clearer view." : "back."}</h1><p class="auth-intro">${registering ? "Create a customer account to register vehicles and follow your service requests." : "Sign in to your workshop or customer account."}</p>
     <form id="auth-form" class="auth-form">${registering ? '<label>Your name<input type="text" name="name" autocomplete="name" required maxlength="200" placeholder="Full name"></label><label>Phone <span class="field-optional">OPTIONAL</span><input type="tel" name="phone" autocomplete="tel" maxlength="32" placeholder="Contact number"></label>' : ""}<label>Email address<input type="email" name="email" autocomplete="email" required maxlength="320" placeholder="you@example.com"></label><label>Password<input type="password" name="password" autocomplete="${registering ? "new-password" : "current-password"}" required minlength="8" maxlength="72" placeholder="At least 8 characters"></label><button class="button button-lime auth-submit" type="submit">${registering ? "Create customer account" : "Sign in"} ${icon("arrow", 16)}</button><p id="auth-error" class="form-error" role="alert"></p></form>
     <p class="auth-switch">${registering ? "Already have an account?" : "New to OPTISERVE?"} <a href="#/${registering ? "login" : "register"}">${registering ? "Sign in" : "Create an account"}</a></p><p class="auth-note">Public registration creates customer accounts only. Workshop administrator access is provisioned separately.</p></section><aside class="auth-aside"><span class="aside-index">OPERATIONS / 01</span><div class="aside-rule"></div><p>Clarity at every<br><em>service stage.</em></p><div class="aside-flow"><span>REQUEST</span><i></i><span>QUEUE</span><i></i><span>ASSIGN</span><i></i><span>COMPLETE</span></div></aside></main>`;
   document.querySelector("#auth-form").addEventListener("submit", async (event) => {
@@ -433,14 +441,16 @@ function authPage(mode = "login") {
 function dashboardShell(active = "overview") {
   const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
   const nav = admin
-    ? [["overview", "Workshop overview", "grid"], ["analytics", "Analytics", "grid"], ["automation", "Automation", "check"], ["requests", "Service requests", "layers"], ["queue", "Live queue", "clock"], ["resources", "Resources", "wrench"], ["service-types", "Service types", "layers"]]
+    ? [["overview", "Workshop overview", "grid"], ["work", "Active work", "wrench"], ["history", "Service history", "clock"], ["analytics", "Analytics", "grid"], ["automation", "Automation", "check"], ["requests", "Service requests", "layers"], ["queue", "Live queue", "clock"], ["resources", "Resources", "wrench"], ["service-types", "Service types", "layers"]]
     : [["overview", "Overview", "grid"], ["requests", "Service requests", "layers"], ["queue", "My service queue", "clock"], ["vehicles", "My vehicles", "wrench"], ["profile", "Profile", "grid"]];
-  return `<div class="app-shell"><aside class="app-sidebar" id="sidebar"><div class="sidebar-brand">${brand(true)}<span>OPERATIONS</span></div><div class="sidebar-caption">WORKSPACE</div><nav class="app-nav" aria-label="Operations navigation">${nav.map(([id, label, glyph]) => `<a href="#/app/${id}" class="${active === id ? "selected" : ""}" ${active === id ? 'aria-current="page"' : ""}>${icon(glyph, 17)}<span>${label}</span>${id === "queue" ? '<i class="nav-dot"></i>' : ""}</a>`).join("")}</nav><div class="sidebar-spacer"></div><div class="sidebar-foot"><div class="system-state"><i></i><span>API CONNECTION</span><b id="connection-label">CHECKING</b></div><button id="sign-out" class="sign-out">${icon("logout", 16)} Sign out</button></div></aside><div class="app-main"><header class="app-topbar"><button class="topbar-menu" id="menu-toggle" type="button" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="false">${icon("menu")}</button><div class="breadcrumbs"><span>OPTISERVE</span><i>/</i><strong>${nav.find(([id]) => id === active)?.[1] || "Overview"}</strong></div><div class="topbar-right"><span class="topbar-date">${new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric" }).format(new Date())}</span><span class="avatar">OP</span></div></header><main class="dashboard-content" id="dashboard-content"><div class="loading-state"><span class="spinner"></span><p>Connecting to your workshop…</p></div></main></div></div>`;
+  return `<div class="app-shell ${admin ? "workshop-app" : "customer-app"}"><aside class="app-sidebar" id="sidebar"><div class="sidebar-brand">${brand(true)}<span>${admin ? "WORKSHOP" : "CUSTOMER"}</span></div><div class="sidebar-caption">${admin ? "Workshop operations" : "Your service account"}</div><nav class="app-nav" aria-label="Operations navigation">${nav.map(([id, label, glyph]) => `<a href="#/app/${id}" class="${active === id ? "selected" : ""}" ${active === id ? 'aria-current="page"' : ""}>${icon(glyph, 17)}<span>${label}</span>${id === "queue" ? '<i class="nav-dot"></i>' : ""}</a>`).join("")}</nav><div class="sidebar-spacer"></div><div class="sidebar-foot"><div class="system-state"><i></i><span>API CONNECTION</span><b id="connection-label">CHECKING</b></div><button id="sign-out" class="sign-out">${icon("logout", 16)} Sign out</button></div></aside><div class="app-main"><header class="app-topbar"><button class="topbar-menu" id="menu-toggle" type="button" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="false">${icon("menu")}</button><div class="breadcrumbs"><span>OPTISERVE</span><i>/</i><strong>${nav.find(([id]) => id === active)?.[1] || "Overview"}</strong></div><div class="topbar-right"><span class="topbar-date">${new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric" }).format(new Date())}</span><span class="avatar">OP</span></div></header><main class="dashboard-content" id="dashboard-content"><div class="loading-state"><span class="spinner"></span><p>Connecting to your workshop…</p></div></main></div></div>`;
 }
 
 let dashboardData = { customer: null, vehicles: [], requests: [], queue: [], resources: [], serviceTypes: [], assignments: [], analytics: null, automation: null, waits: {}, errors: {} };
 let dashboardNavigationCleanup = null;
 let activeDashboardPage = "overview";
+let dashboardLoadVersion = 0;
+let dashboardUpdatedAt = null;
 let analyticsRange = null;
 
 function defaultAnalyticsRange() {
@@ -452,44 +462,40 @@ function defaultAnalyticsRange() {
 }
 
 async function loadDashboard() {
-  dashboardData.errors = {};
-  dashboardData.waits = {};
+  const version = ++dashboardLoadVersion;
+  const page = activeDashboardPage;
   const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
-  const outcomes = await Promise.allSettled([
-    admin ? Promise.resolve(null) : api("/api/customers/me"),
-    admin ? Promise.resolve([]) : api("/api/vehicles"),
-    api("/api/service-requests"), api("/api/queue"), api("/api/resources"), api("/api/service-types"), api("/api/assignments"),
-    admin ? api("/api/admin/workshop-automation") : Promise.resolve(null),
-    admin && activeDashboardPage === "analytics"
-      ? api(`/api/admin/analytics?from=${encodeURIComponent(analyticsRange.from)}&to=${encodeURIComponent(analyticsRange.to)}`)
-      : Promise.resolve(null),
-  ]);
-  const names = ["customer", "vehicles", "requests", "queue", "resources", "serviceTypes", "assignments", "automation", "analytics"];
+  const calls = { requests: "/api/service-requests", queue: "/api/queue", serviceTypes: "/api/service-types", assignments: "/api/assignments" };
+  if (admin) { calls.resources = "/api/resources"; calls.automation = "/api/admin/workshop-automation"; }
+  else { calls.customer = "/api/customers/me"; calls.vehicles = "/api/vehicles"; }
+  if (admin && page === "analytics") calls.analytics = `/api/admin/analytics?from=${encodeURIComponent(analyticsRange.from)}&to=${encodeURIComponent(analyticsRange.to)}`;
+  document.querySelectorAll('[data-action="refresh"], [data-action="retry"]').forEach(button => button.disabled = true);
+  const names = Object.keys(calls);
+  const outcomes = await Promise.allSettled(names.map(name => api(calls[name])));
+  if (version !== dashboardLoadVersion || !location.hash.startsWith("#/app")) return;
+  dashboardData = { customer: null, vehicles: [], requests: [], queue: [], resources: [], serviceTypes: [], assignments: [], analytics: null, automation: null, waits: {}, errors: {} };
   outcomes.forEach((result, index) => {
     if (result.status === "fulfilled") dashboardData[names[index]] = result.value;
-    else {
-      dashboardData.errors[names[index]] = result.reason;
-      dashboardData[names[index]] = ["customer", "analytics", "automation"].includes(names[index]) ? null : [];
-    }
+    else dashboardData.errors[names[index]] = result.reason;
   });
-  if (outcomes.some((result) => result.status === "rejected" && result.reason.status === 401)) {
-    sessionStorage.removeItem(TOKEN_KEY);
-    sessionStorage.removeItem(ROLE_KEY);
-    location.hash = "#/login";
-    return;
+  if (outcomes.some(result => result.status === "rejected" && result.reason.status === 401)) {
+    sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(ROLE_KEY); location.hash = "#/login"; return;
   }
-  if (!admin && dashboardData.errors.customer?.status === 404) {
-    renderCustomerProfileSetup();
-    return;
-  }
-  document.querySelector("#connection-label").textContent = outcomes.some((result) => result.status === "fulfilled") ? "CONNECTED" : "UNAVAILABLE";
-  document.querySelector(".system-state")?.classList.toggle("disconnected", outcomes.every((result) => result.status === "rejected"));
-  const queueEntries = dashboardData.queue;
-  await Promise.all(queueEntries.map(async (entry) => {
-    try { dashboardData.waits[entry.stageId] = await api(`/api/queue/stages/${entry.stageId}/wait-time`); }
-    catch (error) { dashboardData.waits[entry.stageId] = { error: error.message }; }
+  const successes = outcomes.filter(result => result.status === "fulfilled").length;
+  const coreUnavailable = ["requests", "queue"].some(name => dashboardData.errors[name]);
+  const connection = document.querySelector("#connection-label");
+  if (connection) connection.textContent = coreUnavailable ? (successes ? "PARTIAL" : "UNAVAILABLE") : "CONNECTED";
+  document.querySelector(".system-state")?.classList.toggle("disconnected", coreUnavailable);
+  dashboardUpdatedAt = successes ? new Date() : null;
+  if (!admin && dashboardData.errors.customer?.status === 404) { renderCustomerProfileSetup(); return; }
+  const waits = await Promise.all(dashboardData.queue.map(async entry => {
+    try { return [entry.stageId, await api(`/api/queue/stages/${entry.stageId}/wait-time`)]; }
+    catch (error) { return [entry.stageId, { error: error.message, status: error.status }]; }
   }));
-  renderDashboard(location.hash.split("/")[2] || "overview");
+  if (version !== dashboardLoadVersion) return;
+  if (waits.some(([,wait]) => wait.status === 401)) { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(ROLE_KEY); location.hash = "#/login"; return; }
+  dashboardData.waits = Object.fromEntries(waits);
+  renderDashboard(page);
 }
 
 function renderCustomerProfileSetup() {
@@ -522,11 +528,12 @@ function vehiclesPage() {
   return `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">GARAGE / ACCOUNT</span><h2>My vehicles</h2><p>Vehicles registered to your profile. Vehicles with service history are retained.</p></div><button class="button button-lime" data-action="add-vehicle">Add vehicle ${icon("plus", 15)}</button></div>${rows ? `<div class="table-wrap"><table><thead><tr><th>REGISTRATION</th><th>VEHICLE</th><th>YEAR</th><th>ACTIONS</th></tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty-state"><h3>No vehicles registered</h3><p>Add a vehicle to create a service request.</p></div>`}</section>`;
 }
 
-function assignmentsPanel() {
+function assignmentsPanel(mode = "all") {
+  const entries = dashboardData.assignments.filter(item => mode !== "history" || ["COMPLETED", "CANCELLED"].includes(item.assignmentStatus));
   if (dashboardData.errors.assignments) return errorPanel("Assignments unavailable", dashboardData.errors.assignments.message);
-  if (!dashboardData.assignments.length) return '<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE / ASSIGNMENTS</span><h2>Assignment history</h2></div></div><div class="empty-inline"><span>' + icon("check", 18) + '</span><div><strong>No assignments yet</strong><p>Assignments for your service requests will appear here.</p></div></div></section>';
+  if (!entries.length) return '<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE / ASSIGNMENTS</span><h2>Assignment history</h2></div></div><div class="empty-inline"><span>' + icon("check", 18) + '</span><div><strong>No assignments yet</strong><p>Assignments for your service requests will appear here.</p></div></div></section>';
   const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
-  const rows = dashboardData.assignments.map((item) => "<tr><td>" + escapeHtml(item.vehicleRegistrationNumber)
+  const rows = entries.map((item) => "<tr><td>" + escapeHtml(item.vehicleRegistrationNumber)
     + "</td><td>" + escapeHtml(item.serviceTypeName) + "</td><td>" + escapeHtml(item.resourceName) + "</td>"
     + '<td><span class="status-tag status-' + escapeHtml(String(item.assignmentStatus).toLowerCase()) + '">'
     + escapeHtml(item.assignmentStatus.replaceAll("_", " ")) + "</span></td><td>"
@@ -609,7 +616,7 @@ function analyticsPage() {
 }
 
 function requestRow(request) {
-  const stage = request.stages?.[0];
+  const stage = request.stages?.find(item => ["IN_PROGRESS", "ASSIGNED", "QUEUED", "ELIGIBLE"].includes(item.status)) || request.stages?.[0];
   const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
   const progress = request.stages?.map((item) => '<span class="stage-pill stage-' + escapeHtml(String(item.status).toLowerCase()) + '"><span>'
     + escapeHtml(item.serviceTypeName) + ' <i>' + escapeHtml(item.status.replaceAll("_", " ")) + "</i></span>"
@@ -617,10 +624,10 @@ function requestRow(request) {
     + (item.status === "ELIGIBLE" ? ' <button class="stage-queue-action" data-action="queue-stage" data-stage="' + escapeHtml(item.id) + '">Queue</button>' : "")
     + "</span>").join("") || "—";
   return '<tr data-status="' + escapeHtml(request.status) + '" data-search="'
-    + escapeHtml((request.vehicleRegistrationNumber + " " + (stage?.serviceTypeName || "") + " " + request.status + " " + request.priority).toLowerCase())
+    + escapeHtml((request.vehicleRegistrationNumber + " " + (request.stages || []).map(item => item.serviceTypeName).join(" ") + " " + request.status + " " + request.priority).toLowerCase())
     + '"><td><span class="table-primary">' + escapeHtml(request.vehicleRegistrationNumber)
-    + '</span><span class="table-secondary">' + escapeHtml(request.id.slice(0, 8).toUpperCase())
-    + '</span></td><td><span class="table-primary">' + escapeHtml(stage?.serviceTypeName || "Service request")
+    + '</span><a class="table-secondary request-detail-link" href="#/app/request/' + encodeURIComponent(request.id) + '">View work order · ' + escapeHtml(request.id.slice(0, 8).toUpperCase())
+    + '</a></td><td><span class="table-primary">' + escapeHtml(stage?.serviceTypeName || "Service request")
     + '</span><span class="table-secondary">' + (request.stages?.length || 0) + " workflow stage"
     + (request.stages?.length === 1 ? "" : "s") + '</span></td><td><div class="stage-list">' + progress
     + '</div></td><td><span class="status-tag status-' + escapeHtml(String(request.status).toLowerCase()) + '">'
@@ -636,7 +643,7 @@ function requestTable() {
     + (customerAccount ? '<button class="button button-outline" data-action="new-request">Create a request ' + icon("arrow", 15) + "</button>" : "")
     + "</div>";
   const rows = dashboardData.requests.map((request) => requestRow(request)).join("");
-  return '<div class="table-wrap"><table><thead><tr><th>VEHICLE</th><th>SERVICE</th><th>WORKFLOW STAGES</th><th>STATUS</th><th>PRIORITY</th><th>APPOINTMENT</th></tr></thead><tbody>'
+  return '<p class="request-table-hint">Swipe horizontally to view all service request details.</p><div class="table-wrap request-table-wrap" role="region" aria-label="Service requests" tabindex="0"><table class="request-table"><thead><tr><th>VEHICLE</th><th>SERVICE</th><th>WORKFLOW STAGES</th><th>STATUS</th><th>PRIORITY</th><th>APPOINTMENT</th></tr></thead><tbody>'
     + rows + "</tbody></table></div>";
 }
 function errorPanel(title, message) {
@@ -648,10 +655,10 @@ function queueRows() {
   if (!dashboardData.queue.length) return '<div class="empty-inline"><span>' + icon("check", 18)
     + '</span><div><strong>Queue is clear</strong><p>Waiting stages from the backend will appear here.</p></div></div>';
   const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
-  const rows = dashboardData.queue.map((entry, index) => {
+  const rows = dashboardData.queue.map((entry) => {
     const wait = dashboardData.waits[entry.stageId];
     const expectedDuration = serviceDurationLabel(entry.predictedServiceDuration);
-    return '<article class="queue-item"><span class="queue-position">' + String(index + 1).padStart(2, "0")
+    return '<article class="queue-item"><span class="queue-symbol" aria-hidden="true">' + icon("clock", 16)
       + '</span><div class="queue-vehicle"><strong>' + escapeHtml(entry.vehicleRegistrationNumber)
       + '</strong><span>' + escapeHtml(entry.serviceTypeName) + " · " + escapeHtml(entry.priority)
       + '</span><small class="queue-duration">' + (expectedDuration
@@ -686,29 +693,62 @@ function automationPage() {
   return `<section class="panel automation-panel"><div class="panel-heading"><div><span class="panel-kicker">WORKSHOP / OPERATING MODE</span><h2>Automatic operations</h2><p>Choose whether eligible work is queued and assigned automatically.</p></div><span class="status-tag ${automatic ? "status-available" : "status-offline"}" data-testid="automation-mode">${automatic ? "AUTO" : "MANUAL"}</span></div><div class="automation-explanation"><p>${automatic ? "AUTO is active. New eligible stages are queued, then the existing priority-aware scheduler attempts compatible available resources." : "MANUAL is active. Staff choose when eligible stages enter the queue and when to assign the next job."}</p><p>Enabling AUTO also considers work already waiting: existing queue entries keep their order, and currently eligible stages are added before the existing scheduler attempts assignments. If no compatible resource is available, work remains queued for a later resource or configuration change. In-progress service is never interrupted.</p></div>${automationActionError ? `<p class="form-error" role="alert">${escapeHtml(automationActionError)}</p>` : ""}<div class="automation-actions"><button class="button ${automatic ? "button-outline" : "button-lime"}" data-action="set-automation-mode" data-mode="${automatic ? "MANUAL" : "AUTO"}">${automatic ? "Return to manual mode" : "Enable automatic operations"}</button><span class="field-hint">Changing modes does not remove queue entries or active assignments.</span></div></section>`;
 }
 
+function activeWorkPanel() {
+  if (dashboardData.errors.assignments) return errorPanel("Active work unavailable", displayError(dashboardData.errors.assignments));
+  const active = dashboardData.assignments.filter(item => ["ASSIGNED", "IN_PROGRESS"].includes(item.assignmentStatus));
+  return `<section class="panel active-work-panel"><div class="panel-heading"><div><span class="panel-kicker">Workshop / Execution</span><h2>Active assignments</h2><p>Start assigned work. Record actual minutes when service is complete.</p></div><a class="panel-link" href="#/app/history">Service history ${icon("arrow", 14)}</a></div>${active.length ? `<div class="active-work-list">${active.map(item => `<article class="active-work-item"><div><span class="status-tag status-${item.assignmentStatus.toLowerCase()}">${escapeHtml(item.assignmentStatus.replaceAll("_", " "))}</span><h3>${escapeHtml(item.vehicleRegistrationNumber)} · ${escapeHtml(item.serviceTypeName)}</h3><p>${escapeHtml(item.resourceName)} · ${escapeHtml(item.priority)}</p><a href="#/app/request/${encodeURIComponent(item.serviceRequestId)}" class="panel-link">Open work order</a></div><div>${assignmentDurationSummary(item, true)}</div><div>${assignmentControls(item)}</div></article>`).join("")}</div>` : `<div class="empty-state"><h3>No active assignments</h3><p>Assign compatible waiting work from the queue.</p><a class="panel-link" href="#/app/queue">Open queue ${icon("arrow", 14)}</a></div>`}</section>`;
+}
+
+function workOrderDetail() {
+  if (dashboardData.errors.requests) return errorPanel("Work order unavailable", displayError(dashboardData.errors.requests));
+  const id = decodeURIComponent(location.hash.split("/")[3] || "");
+  const request = dashboardData.requests.find(item => item.id === id);
+  if (!request) return `<section class="panel empty-state"><h2>Work order not found</h2><p>This request is unavailable for your account.</p><a href="#/app/requests" class="panel-link">Back to service requests</a></section>`;
+  const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
+  const stages = [...request.stages].sort((a,b) => a.sequenceNumber - b.sequenceNumber);
+  const completed = stages.filter(stage => stage.status === "COMPLETED").length;
+  return `<section class="panel order-detail"><div class="panel-heading"><div><span class="panel-kicker">Service work order · ${escapeHtml(request.id.slice(0,8))}</span><h2>${escapeHtml(request.vehicleRegistrationNumber)}</h2><p>${escapeHtml(request.priority)} priority · ${escapeHtml(request.workflowStatus)} workflow · ${completed} of ${stages.length} stages completed</p>${request.appointmentTime ? `<p>Appointment ${escapeHtml(formatDate(request.appointmentTime))}</p>` : ""}</div><a class="panel-link" href="#/app/requests">All requests ${icon("arrow",14)}</a></div>${dashboardData.errors.assignments ? errorPanel("Assignment details unavailable", displayError(dashboardData.errors.assignments)) : ""}<ol class="detail-stages">${stages.map(stage => {
+    const assignment = dashboardData.assignments.find(item => item.stageId === stage.id && item.assignmentStatus !== "CANCELLED");
+    const wait = dashboardData.waits[stage.id];
+    return `<li class="detail-stage detail-stage-${stage.status.toLowerCase()}"><span class="detail-stage-number">${String(stage.sequenceNumber).padStart(2,"0")}</span><div class="detail-stage-content"><div class="detail-stage-heading"><h3>${escapeHtml(stage.serviceTypeName)}</h3><span class="status-tag">${escapeHtml(stage.status.replaceAll("_"," "))}</span></div>${stageEstimate(stage,admin)}${stage.status === "QUEUED" ? `<p class="detail-wait">Estimated wait: <strong>${wait && !wait.error ? escapeHtml(wait.estimatedWaitMinutes) + " min" : "Unavailable"}</strong>${wait?.calculatedAt ? ` · calculated ${escapeHtml(formatDate(wait.calculatedAt))}` : ""}</p>` : ""}${stage.status === "PENDING" ? '<p>Waiting for the preceding stage to complete.</p>' : ""}${assignment ? `<p>Resource: <strong>${escapeHtml(assignment.resourceName)}</strong></p>${assignmentDurationSummary(assignment,admin)}<p class="detail-timestamps">Assigned ${escapeHtml(formatDate(assignment.assignedAt))}${assignment.startedAt ? ` · Started ${escapeHtml(formatDate(assignment.startedAt))}` : ""}${assignment.completedAt ? ` · Completed ${escapeHtml(formatDate(assignment.completedAt))}` : ""}</p>${admin ? assignmentControls(assignment) : ""}` : ""}${stage.status === "ELIGIBLE" ? `<button class="button button-outline" data-action="queue-stage" data-stage="${escapeHtml(stage.id)}">Queue stage</button>` : ""}</div></li>`;
+  }).join("")}</ol></section>`;
+}
+
+function overviewMetrics(admin) {
+  const metric = (source,label,value,note) => `<article class="metric-card"><span class="metric-label">${label}</span><strong>${dashboardData.errors[source] ? "—" : value}</strong><div class="metric-foot">${dashboardData.errors[source] ? "Data unavailable" : note}</div></article>`;
+  const active = dashboardData.requests.filter(item => !["COMPLETED","CANCELLED","NO_SHOW"].includes(item.status)).length;
+  return `<section class="metric-grid" aria-label="Current account snapshot">${metric("requests",admin ? "ACTIVE REQUESTS" : "MY ACTIVE REQUESTS",active,"Work still to complete")}${metric("queue",admin ? "WAITING STAGES" : "MY WAITING STAGES",dashboardData.queue.length,"Waiting for assignment")}${admin ? metric("assignments","ACTIVE ASSIGNMENTS",dashboardData.assignments.filter(item=>["ASSIGNED","IN_PROGRESS"].includes(item.assignmentStatus)).length,"Assigned or underway") : metric("vehicles","MY VEHICLES",dashboardData.vehicles.length,"Registered to your profile")}${admin ? metric("resources","AVAILABLE RESOURCES",dashboardData.resources.filter(item=>item.status==="AVAILABLE").length,"Compatibility checked at assignment") : metric("requests","COMPLETED REQUESTS",dashboardData.requests.filter(item=>item.status==="COMPLETED").length,"Final stage completed")}</section>`;
+}
+
 function renderDashboard(page = "overview") {
   const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
-  const title = { overview: admin ? "Workshop overview" : "My service overview", analytics: "Operational analytics", automation: "Workshop automation", requests: "Service requests", queue: admin ? "Live queue" : "My service queue", resources: "Resources", "service-types": "Service types", vehicles: "My vehicles", profile: "Customer profile" }[page] || "Workshop overview";
-  const available = dashboardData.resources.filter((resource) => resource.status === "AVAILABLE").length;
-  const failed = Object.values(dashboardData.errors).length;
-  const serviceCards = `<section class="metric-grid"><article class="metric-card metric-main"><span class="metric-label">${admin ? "ACTIVE REQUESTS" : "MY ACTIVE REQUESTS"}</span><strong>${dashboardData.requests.filter((request) => request.status !== "COMPLETED" && request.status !== "CANCELLED").length.toString().padStart(2, "0")}</strong><div class="metric-foot"><span class="metric-accent"></span>From service request API</div></article><article class="metric-card"><span class="metric-label">${admin ? "WORKSHOP QUEUE" : "MY QUEUED STAGES"}</span><strong>${dashboardData.queue.length.toString().padStart(2, "0")}</strong><div class="metric-foot">${dashboardData.queue.length ? "Backend-calculated timing" : "No active queue entries"}</div></article>${admin ? `<article class="metric-card"><span class="metric-label">RESOURCES READY</span><strong>${dashboardData.resources.filter((resource) => resource.status === "AVAILABLE").length.toString().padStart(2, "0")}</strong><div class="metric-foot">Compatible workshop resources</div></article>` : `<article class="metric-card"><span class="metric-label">MY VEHICLES</span><strong>${dashboardData.vehicles.length.toString().padStart(2, "0")}</strong><div class="metric-foot">Registered to your profile</div></article>`}<article class="metric-card"><span class="metric-label">SERVICE TYPES</span><strong>${dashboardData.serviceTypes.filter((type) => type.active).length.toString().padStart(2, "0")}</strong><div class="metric-foot">Active for service requests</div></article></section>`;
-  const content = page === "automation" && admin ? automationPage()
-    : page === "analytics" && admin ? analyticsPage()
-    : page === "profile" && !admin ? profilePage()
-    : page === "vehicles" ? vehiclesPage()
-      : page === "queue" ? `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">OPERATIONS / LIVE</span><h2>${admin ? "Queue sequence" : "Your waiting stages"}</h2><p>Wait estimates are calculated by the backend from current queue and resource state.</p></div>${admin ? `<button class="button button-outline" data-action="assign-next">Assign next ${icon("arrow", 15)}</button>` : ""}</div>${queueRows()}</section>${assignmentsPanel()}<section id="assignment-result"></section>`
-    : page === "resources" && admin ? resourceManagementPage()
-    : page === "service-types" && admin ? serviceTypesPage()
-      : page === "requests" ? `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">WORKFLOW / ALL</span><h2>Service requests</h2><p>Current requests and workflow stages from the backend.</p></div><div class="panel-actions"><label class="search-box">${icon("search", 16)}<input id="request-search" type="search" placeholder="Search vehicles or service" aria-label="Search service requests"></label><select class="status-filter" id="request-status-filter" aria-label="Filter by request status"><option value="">All statuses</option>${["CREATED", "WAITING", "ASSIGNED", "IN_SERVICE", "COMPLETED", "CANCELLED", "NO_SHOW"].map((status) => `<option value="${status}">${status.replaceAll("_", " ")}</option>`).join("")}</select>${admin ? "" : `<button class="button button-outline" data-action="new-request">New request ${icon("plus", 15)}</button>`}</div></div>${requestTable()}</section>`
-        : `<section class="panel queue-panel"><div class="panel-heading"><div><span class="panel-kicker">WORKFLOW / NOW</span><h2>Queue at a glance</h2><p>Wait estimates update from the live workshop state.</p></div><a class="panel-link" href="#/app/queue">View queue ${icon("arrow", 14)}</a></div>${queueRows()}</section><section class="panel request-panel"><div class="panel-heading"><div><span class="panel-kicker">SERVICE / PIPELINE</span><h2>Recent requests</h2><p>Workflow progress for registered service requests.</p></div><a class="panel-link" href="#/app/requests">All requests ${icon("arrow", 14)}</a></div>${requestTable()}</section><section class="dashboard-lower"><div class="panel resource-panel"><div class="panel-heading"><div><span class="panel-kicker">CAPACITY / RESOURCES</span><h2>Workshop resources</h2></div><a class="panel-link" href="#/app/resources">All resources ${icon("arrow", 14)}</a></div>${resourceCards()}</div><aside class="duration-note"><span class="duration-symbol">${icon("clock", 19)}</span><span class="panel-kicker">DURATION &amp; WAITING</span><h3>Two different signals.</h3><p>Duration guidance belongs to each service. Waiting time is calculated dynamically from queue and resource state.</p><div class="duration-note-row"><span>Standard service duration</span><strong>Service type default</strong></div><div class="duration-note-row"><span>Predicted duration</span><strong>Shown beside each stage</strong></div><div class="duration-note-row"><span>Estimated wait</span><strong>Live backend estimate</strong></div></aside></section>`;
-  document.querySelector("#dashboard-content").innerHTML = `<div class="page-heading"><div><span class="eyebrow"><span class="eyebrow-dot"></span> WORKSHOP / OPERATIONS</span><h1>${title}</h1><p>${page === "analytics" ? "Historical performance with a separate live workshop snapshot." : "Real-time operational data from the OPTISERVE backend."}</p></div><div class="page-heading-actions"><span class="refresh-time">Updated ${new Intl.DateTimeFormat(undefined, { timeStyle: "short" }).format(new Date())}</span><button class="button button-lime" data-action="refresh">Refresh data ${icon("arrow", 15)}</button></div></div>${failed ? `<div class="partial-warning" role="status">${failed} data source${failed === 1 ? " is" : "s are"} unavailable. Displaying available API data only.</div>` : ""}${serviceCards}${content}<p class="api-footnote">Service estimates show persisted stage durations and their recorded source. Waiting time remains a live backend calculation.</p>`;
+  const titles = {overview: admin ? "Workshop overview" : "My service overview", work:"Active work", history:"Service history", request:"Service work order", analytics:"Operational analytics", automation:"Workshop automation",requests:"Service requests",queue:admin ? "Live queue" : "My service queue",resources:"Resources","service-types":"Service types",vehicles:"My vehicles",profile:"Customer profile"};
+  const queuePanel = `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">Waiting work</span><h2>${admin ? "Waiting stages" : "Your waiting stages"}</h2><p>Listed by queue arrival, not assignment rank. Priority, aging and resource compatibility affect the next assignment.</p></div>${admin ? `<button class="button button-outline" data-action="assign-next">Assign next ${icon("arrow",15)}</button>` : ""}</div>${queueRows()}</section>`;
+  const requestsPanel = `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">Service work orders</span><h2>Service requests</h2><p>Open a work order to see each stage, resource and recorded duration.</p></div><div class="panel-actions"><label class="search-box">${icon("search",16)}<input id="request-search" type="search" placeholder="Search vehicles or service" aria-label="Search service requests"></label><select class="status-filter" id="request-status-filter" aria-label="Filter by request status"><option value="">All statuses</option>${["CREATED","WAITING","ASSIGNED","IN_SERVICE","COMPLETED","CANCELLED","NO_SHOW"].map(status=>`<option value="${status}">${status.replaceAll("_"," ")}</option>`).join("")}</select>${admin ? "" : `<button class="button button-outline" data-action="new-request">New request ${icon("plus",15)}</button>`}</div></div>${requestTable()}</section>`;
+  let content;
+  if (page === "request") content = workOrderDetail();
+  else if(page === "work" && admin) content = activeWorkPanel();
+  else if(page === "history" && admin) content = assignmentsPanel("history");
+  else if(page === "analytics" && admin) content = analyticsPage();
+  else if(page === "automation" && admin) content = automationPage();
+  else if(page === "resources" && admin) content = resourceManagementPage();
+  else if(page === "service-types" && admin) content = serviceTypesPage();
+  else if(page === "profile" && !admin) content = profilePage();
+  else if(page === "vehicles" && !admin) content = vehiclesPage();
+  else if(page === "requests") content = requestsPanel;
+  else if(page === "queue") content = queuePanel + assignmentsPanel() + '<section id="assignment-result"></section>';
+  else if(admin) content = `<div class="operations-brief"><p><strong>${dashboardData.automation?.mode === "AUTO" ? "Automatic operations" : dashboardData.automation?.mode === "MANUAL" ? "Manual operations" : "Operating mode unavailable"}</strong><span> Review waiting work and keep assigned services moving.</span></p><a href="#/app/automation">Workshop settings ${icon("arrow",14)}</a></div>${activeWorkPanel()}${queuePanel}<section id="assignment-result"></section>${requestsPanel}`;
+  else content = `<section class="customer-welcome"><div><p>Your service, step by step</p><h2>${dashboardData.customer?.name ? "Welcome, " + escapeHtml(dashboardData.customer.name) + "." : "Your next service starts here."}</h2><p>Register a vehicle, request its services and follow each stage through the workshop.</p></div><button class="button button-lime" data-action="new-request">New service request ${icon("plus",15)}</button></section>${requestsPanel}${queuePanel}`;
+  const failed = Object.keys(dashboardData.errors).length;
+  document.querySelector("#dashboard-content").innerHTML = `<div class="page-heading"><div><span class="eyebrow">${admin ? "Workshop operations" : "Your service account"}</span><h1>${titles[page] || titles.overview}</h1><p>${page === "analytics" ? "Historical results, with current workshop state shown separately." : "A current snapshot. Refresh or complete an action to update."}</p></div><div class="page-heading-actions"><span class="refresh-time">${dashboardUpdatedAt ? "Fetched " + new Intl.DateTimeFormat(undefined,{timeStyle:"short"}).format(dashboardUpdatedAt) : "Data unavailable"}</span><button class="button button-lime" data-action="refresh">Refresh data ${icon("arrow",15)}</button></div></div>${failed ? `<div class="partial-warning" role="status">${failed} data source${failed===1 ? " is" : "s are"} unavailable. Missing values are not shown as zero.</div>` : ""}${page === "overview" ? overviewMetrics(admin) : ""}${content}<p class="api-footnote">Service duration is an estimate of the work. Waiting time is calculated separately from queue and resource state.</p>`;
   wireDashboardActions();
 }
 
 function wireDashboardActions() {
   dashboardNavigationCleanup?.();
   dashboardNavigationCleanup = null;
-  document.querySelector("#sign-out")?.addEventListener("click", () => { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(ROLE_KEY); location.hash = "#/login"; });
+  const signOut = document.querySelector("#sign-out");
+  if (signOut) signOut.onclick = () => { sessionStorage.removeItem(TOKEN_KEY); sessionStorage.removeItem(ROLE_KEY); assignmentDurationDrafts.clear(); assignmentActionErrors.clear(); location.hash = "#/login"; };
   const menuButton = document.querySelector("#menu-toggle");
   const sidebar = document.querySelector("#sidebar");
   if (menuButton && sidebar) {
@@ -716,6 +756,7 @@ function wireDashboardActions() {
     const setSidebarOpen = (open, returnFocus = false) => {
       const shouldOpen = open && mobileNavigation.matches;
       sidebar.classList.toggle("sidebar-open", shouldOpen);
+      sidebar.inert = mobileNavigation.matches && !shouldOpen;
       menuButton.setAttribute("aria-expanded", String(shouldOpen));
       if (!shouldOpen && returnFocus && mobileNavigation.matches) menuButton.focus();
     };
@@ -728,6 +769,7 @@ function wireDashboardActions() {
     };
     const closeOnNavigation = () => setSidebarOpen(false, true);
     const handleBreakpointChange = () => setSidebarOpen(false);
+    setSidebarOpen(sidebar.classList.contains("sidebar-open"));
     menuButton.addEventListener("click", toggleSidebar);
     document.addEventListener("pointerdown", closeOnOutsideTap);
     window.addEventListener("keydown", closeOnEscape);
@@ -742,6 +784,7 @@ function wireDashboardActions() {
     };
   }
   document.querySelectorAll('[data-action="refresh"], [data-action="retry"]').forEach((button) => button.addEventListener("click", loadDashboard));
+  document.querySelector('#analytics-range-form input[name="to"]')?.addEventListener("input", event => event.currentTarget.setCustomValidity(""));
   document.querySelector("#analytics-range-form")?.addEventListener("submit", (event) => {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
@@ -876,12 +919,31 @@ async function saveProfile(event) {
   }
 }
 
+function mountModal(modal) {
+  const trigger = document.activeElement;
+  document.body.append(modal);
+  const focusable = () => [...modal.querySelectorAll('button, input, select, textarea, a[href], [tabindex="0"]')].filter(el => !el.disabled && el.getClientRects().length);
+  const onKey = event => {
+    if (event.key === "Escape") { event.preventDefault(); modal.remove(); }
+    if (event.key === "Tab") {
+      const list = focusable(), first = list[0], last = list.at(-1);
+      if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last?.focus(); }
+      else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first?.focus(); }
+    }
+  };
+  app.inert = true;
+  modal.addEventListener("keydown", onKey);
+  const observer = new MutationObserver(() => { if (!modal.isConnected) { app.inert = false; observer.disconnect(); if (trigger?.isConnected) trigger.focus(); } });
+  observer.observe(document.body, {childList:true});
+  requestAnimationFrame(() => focusable().find(el => el.matches('input,select,textarea'))?.focus());
+}
+
 function showVehicleForm(vehicle = null) {
   const modal = document.createElement("div");
   modal.className = "modal-backdrop";
   const editing = Boolean(vehicle);
   modal.innerHTML = `<section class="modal" role="dialog" aria-modal="true" aria-labelledby="vehicle-modal-title"><button class="modal-close" type="button" aria-label="Close dialog">×</button><span class="panel-kicker">GARAGE / VEHICLE</span><h2 id="vehicle-modal-title">${editing ? "Update vehicle" : "Add a vehicle"}</h2><form id="vehicle-form" class="auth-form"><label>Registration number<input name="registrationNumber" maxlength="32" required value="${escapeHtml(vehicle?.registrationNumber || "")}"></label><label>Make<input name="make" maxlength="100" required value="${escapeHtml(vehicle?.make || "")}"></label><label>Model<input name="model" maxlength="100" required value="${escapeHtml(vehicle?.model || "")}"></label><label>Year<input type="number" name="year" min="1" required value="${escapeHtml(vehicle?.year || "")}"></label><button class="button button-lime" type="submit">${editing ? "Save vehicle" : "Add vehicle"}</button><p class="form-error" role="alert"></p></form></section>`;
-  document.body.append(modal);
+  mountModal(modal);
   modal.querySelector(".modal-close").focus();
   modal.querySelector(".modal-close").addEventListener("click", () => modal.remove());
   modal.addEventListener("click", (event) => { if (event.target === modal) modal.remove(); });
@@ -910,7 +972,7 @@ function showVehicleForm(vehicle = null) {
 function filterRequests() {
   const query = (document.querySelector("#request-search")?.value || "").trim().toLowerCase();
   const status = document.querySelector("#request-status-filter")?.value || "";
-  document.querySelectorAll("tbody tr").forEach((row) => {
+  document.querySelectorAll("tbody tr[data-search]").forEach((row) => {
     const requestStatus = row.dataset.status || "";
     row.hidden = !row.dataset.search.includes(query) || Boolean(status && status !== requestStatus);
   });
@@ -922,7 +984,7 @@ function showServiceTypeForm(serviceType = null) {
   const editing = Boolean(serviceType);
   const minutes = serviceType ? (Number(serviceType.defaultServiceDurationSeconds) / 60).toString() : "30";
   modal.innerHTML = `<section class="modal" role="dialog" aria-modal="true" aria-labelledby="service-type-modal-title"><button class="modal-close" type="button" aria-label="Close dialog">×</button><span class="panel-kicker">CONFIGURATION / SERVICE TYPE</span><h2 id="service-type-modal-title">${editing ? "Edit service type" : "Add service type"}</h2><form id="service-type-form" class="auth-form" autocomplete="off"><label>Name<input name="serviceTypeName" autocomplete="off" required maxlength="150" value="${escapeHtml(serviceType?.name || "")}"></label><label>Description<textarea name="description" maxlength="1000">${escapeHtml(serviceType?.description || "")}</textarea></label><label>Default duration in minutes<input name="durationMinutes" type="number" min="0.01" step="0.01" required value="${escapeHtml(minutes)}"></label><label>Availability<select name="active"><option value="true" ${!serviceType || serviceType.active ? "selected" : ""}>Active</option><option value="false" ${serviceType && !serviceType.active ? "selected" : ""}>Inactive</option></select></label><button class="button button-lime" type="submit">${editing ? "Save service type" : "Create service type"}</button><p class="form-error" role="alert"></p></form></section>`;
-  document.body.append(modal);
+  mountModal(modal);
   modal.querySelector(".modal-close").focus();
   modal.querySelector(".modal-close").addEventListener("click", () => modal.remove());
   modal.addEventListener("click", (event) => { if (event.target === modal) modal.remove(); });
@@ -958,7 +1020,7 @@ function showResourceForm(resource = null) {
   modal.className = "modal-backdrop";
   const editing = Boolean(resource);
   modal.innerHTML = `<section class="modal" role="dialog" aria-modal="true" aria-labelledby="resource-modal-title"><button class="modal-close" type="button" aria-label="Close dialog">×</button><span class="panel-kicker">WORKSHOP / RESOURCE</span><h2 id="resource-modal-title">${editing ? "Rename resource" : "Add resource"}</h2><form id="resource-form" class="auth-form"><label>Resource name<input name="name" maxlength="150" required value="${escapeHtml(resource?.name || "")}"></label><button class="button button-lime" type="submit">${editing ? "Save resource" : "Create resource"}</button><p class="form-error" role="alert"></p></form></section>`;
-  document.body.append(modal);
+  mountModal(modal);
   modal.querySelector(".modal-close").focus();
   modal.querySelector(".modal-close").addEventListener("click", () => modal.remove());
   modal.addEventListener("click", (event) => { if (event.target === modal) modal.remove(); });
@@ -995,7 +1057,7 @@ function showRequestForm() {
     : `<p class="field-hint" id="service-stage-hint">${dashboardData.errors.serviceTypes ? "Service types are unavailable right now. Retry after the catalog reconnects." : "No active service types are configured yet. Ask a workshop administrator to add an active service type."}</p>`;
   const serviceStages = types.map((type, index) => `<label class="service-stage-option"><input type="checkbox" name="serviceTypeIds" value="${escapeHtml(type.id)}"><span class="service-stage-order">${String(index + 1).padStart(2, "0")}</span><span class="service-stage-name">${escapeHtml(type.name)}<small>Default ${duration(type.defaultServiceDurationSeconds)}</small></span></label>`).join("");
   modal.innerHTML = `<section class="modal request-modal" role="dialog" aria-modal="true" aria-labelledby="request-modal-title"><button class="modal-close" type="button" aria-label="Close dialog">×</button><span class="panel-kicker">SERVICE / NEW REQUEST</span><h2 id="request-modal-title">Start a request</h2><p class="modal-intro">Register or choose one of your vehicles, then select the ordered service stages.</p><form id="request-form" class="auth-form"><label>Vehicle<select name="vehicleId" required>${options}<option value="new" ${options ? "" : "selected"}>Register a vehicle</option></select></label><div id="new-vehicle-fields" ${options ? "hidden" : ""}><label>Registration number<input name="registrationNumber" maxlength="32" required placeholder="KA01AB1234"></label><label>Make<input name="make" maxlength="100" required placeholder="Toyota"></label><label>Model<input name="model" maxlength="100" required placeholder="Camry"></label><label>Year<input type="number" name="year" min="1" required placeholder="2024"></label></div><label>Priority<select name="priority"><option value="NORMAL">Normal</option><option value="URGENT">Urgent</option><option value="CRITICAL">Critical</option><option value="APPOINTMENT">Appointment</option></select></label><label class="appointment-field" hidden>Appointment time<input type="datetime-local" name="appointmentTime"></label><fieldset class="service-stage-group" tabindex="-1" aria-describedby="service-stage-hint"><legend>Service stages <span>Request order</span></legend><div class="service-stage-options">${serviceStages}</div></fieldset>${serviceTypeHint}<button class="button button-lime auth-submit" type="submit" ${types.length ? "" : "disabled"}>Create service request ${icon("arrow", 15)}</button><p class="form-error" id="request-error" role="alert"></p></form></section>`;
-  document.body.append(modal);
+  mountModal(modal);
   modal.querySelector(".modal-close").focus();
   modal.querySelectorAll('[name="serviceTypeIds"]').forEach((checkbox) => checkbox.addEventListener("change", () => {
     if (modal.querySelector('[name="serviceTypeIds"]:checked')) modal.querySelector("#request-error").textContent = "";
@@ -1122,20 +1184,24 @@ function showToast(message) {
 }
 
 async function dashboard(page = "overview") {
+  const routeVersion = dashboardLoadVersion;
   if (!sessionStorage.getItem(TOKEN_KEY)) { location.hash = "#/login"; return; }
   app.innerHTML = '<div class="loading-state"><span class="spinner"></span><p>Checking your account…</p></div>';
   let role;
   try {
     const session = await api("/api/auth/me");
+    if (routeVersion !== dashboardLoadVersion) return;
     role = session.role;
     sessionStorage.setItem(ROLE_KEY, role);
-  } catch {
+  } catch (error) {
+    if (routeVersion !== dashboardLoadVersion) return;
+    if (error.status !== 401) { app.innerHTML = `<main class="auth-shell"><section class="auth-panel"><h1>Unable to open your account</h1><p>${escapeHtml(displayError(error))}</p><button class="button" id="retry-session">Try again</button><a href="#/login">Back to sign in</a></section></main>`; document.querySelector("#retry-session").onclick = () => dashboard(page); return; }
     sessionStorage.removeItem(TOKEN_KEY);
     sessionStorage.removeItem(ROLE_KEY);
     location.hash = "#/login";
     return;
   }
-  const adminPage = ["analytics", "automation", "resources", "service-types"].includes(page);
+  const adminPage = ["analytics", "automation", "resources", "service-types", "work", "history"].includes(page);
   const customerPage = ["vehicles", "profile"].includes(page);
   if ((role === "ADMIN" && customerPage) || (role !== "ADMIN" && adminPage)) {
     page = "overview";
@@ -1149,6 +1215,8 @@ async function dashboard(page = "overview") {
 }
 
 function renderRoute() {
+  dashboardLoadVersion++;
+  document.querySelectorAll(".modal-backdrop").forEach(modal => modal.remove());
   dashboardNavigationCleanup?.();
   dashboardNavigationCleanup = null;
   const anchor = location.hash.replace(/^#/, "");

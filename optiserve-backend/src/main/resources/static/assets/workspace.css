@@ -1,0 +1,104 @@
+/* Shared application palette; marketing retains its approved local tokens. */
+.app-shell, .auth-shell, .modal-backdrop {
+ color-scheme:light; --color-paper:#f1eee6;--color-paper-2:#e6e8df;--color-paper-3:#fbf9f4;
+ --color-ink:#1d2b24;--color-ink-2:#405046;--color-muted:#59675d;--color-rule:#d8d9ce;--color-rule-2:#a3ada1;
+ --color-accent:#a5442e;--color-accent-ink:#fffaf4;--color-cool:#376758;--color-ok:#30633f;--color-bad:#a62e2b;--color-error:#a62e2b;
+ --color-focus:#a5442e;--surface-deep:#fbf9f4;--surface-raised:#e6e8df;--text-soft:#405046;--text-dim:#59675d;
+ color:var(--color-ink);background:var(--color-paper);
+}
+.app-shell .app-sidebar {--color-paper-2:#345044;--color-ink:#f7f4ed;--color-accent:#e6b18c;--text-soft:#d9e1d7;--text-dim:#b7c7b9;--color-rule:#526958;--color-cool:#e6b18c;--color-ok:#9dc3a0;--color-bad:#f3b9a3;background:#243d34;color:#f7f4ed;overflow-y:auto}
+.app-shell .brand-mark,.auth-shell .brand-mark {background:#243d34;color:#fff;border:0;font:23px Georgia,serif}
+.app-shell .brand-mark i,.auth-shell .brand-mark i {display:none}
+.app-shell .brand-mark::before,.auth-shell .brand-mark::before {content:'O'}
+.app-shell .app-sidebar .brand-mark {background:#f1eee6;color:#243d34}
+.app-shell .brand>span:last-child,.auth-shell .brand>span:last-child {font-size:14px;letter-spacing:.1em}
+.app-shell .page-heading h1 {font-size:clamp(28px,3vw,42px);font-weight:500;letter-spacing:-.04em}
+.app-shell .panel {border:0;border-top:1px solid #d8d9ce;padding:24px;margin-bottom:24px}
+.app-shell .panel-kicker,.app-shell .metric-label {font-family:var(--font-body);font-size:11px;letter-spacing:.03em}
+.app-shell .metric-grid {border:0;background:transparent;gap:0;border-bottom:1px solid #cdd1c5;margin-bottom:28px}
+.app-shell .metric-card {background:transparent;border-right:1px solid #d8d9ce;padding:18px 20px 24px}
+.app-shell .metric-card:last-child {border-right:0}
+.app-shell .metric-card>strong {font-size:36px}
+.app-shell .metric-foot {font-size:11px}
+.app-shell .page-heading .eyebrow {font-family:var(--font-body);font-size:12px;color:#59675d}
+.app-shell .status-tag {font-family:var(--font-body);font-size:11px;border:0;background:#e8ebe1;padding:5px 8px;line-height:1.4}
+.app-shell .status-in_progress,.app-shell .status-in_service,.app-shell .status-assigned {background:#e1eae4;color:#285944}
+.app-shell .status-completed,.app-shell .status-available {background:#e4ecdc;color:#2e5d35}
+.app-shell .status-queued,.app-shell .status-waiting {background:#f1e5d3;color:#804b29}
+.app-shell .stage-pill {background:transparent;border:0;border-left:2px solid #b9c3b4;padding:5px 10px}
+.app-shell .stage-pill i {font-size:10px}
+.app-shell .table-primary {font-size:14px}
+.app-shell .table-secondary {font-size:11px}
+.app-shell th {font-family:var(--font-body);font-size:11px;letter-spacing:.02em}
+.app-shell td {font-size:13px;vertical-align:top}
+.app-shell .request-table {min-width:1040px;table-layout:fixed}
+.app-shell .request-table th:nth-child(1),.app-shell .request-table td:nth-child(1) {width:15%}
+.app-shell .request-table th:nth-child(2),.app-shell .request-table td:nth-child(2) {width:13%}
+.app-shell .request-table th:nth-child(3),.app-shell .request-table td:nth-child(3) {width:37%}
+.app-shell .request-table th:nth-child(4),.app-shell .request-table td:nth-child(4) {width:13%}
+.app-shell .request-table th:nth-child(5),.app-shell .request-table td:nth-child(5) {width:9%}
+.app-shell .request-table th:nth-child(6),.app-shell .request-table td:nth-child(6) {width:13%}
+.app-shell .request-table td {overflow-wrap:anywhere}
+.app-shell .request-table-wrap:focus-visible {outline:2px solid #a5442e;outline-offset:3px}
+.app-shell .request-table-hint {display:none}
+.app-shell .queue-symbol {color:#a5442e}
+.app-shell .queue-duration,.app-shell .queue-status,.app-shell .queue-wait span {font-size:11px}
+.app-shell .operations-brief {display:flex;justify-content:space-between;align-items:center;gap:24px;margin-bottom:28px;padding:18px 22px;background:#e1e7d9;color:#304d3c;font-size:13px}
+.app-shell .operations-brief a {display:inline-flex;gap:10px;align-items:center;white-space:nowrap}
+.app-shell .active-work-list {display:grid;gap:0}
+.app-shell .active-work-item {display:grid;grid-template-columns:1.2fr .8fr 1fr;gap:24px;align-items:center;padding:24px 0;border-top:1px solid #d8d9ce}
+.app-shell .active-work-item h3 {font-size:18px;margin:12px 0 8px;max-width:none}
+.app-shell .active-work-item p {font-size:13px;color:#59675d;margin-bottom:12px}
+.app-shell .active-work-item .duration-comparison {font-size:13px;line-height:1.7}
+.app-shell .duration-comparison>span,.app-shell .duration-comparison>small {display:block}
+.app-shell .assignment-actions {flex-wrap:wrap}
+.app-shell .assignment-actions .duration-input {min-width:100px;max-width:160px}
+.app-shell .assignment-action-error {color:#a62e2b;font-size:12px}
+.app-shell .assignment-controls {flex-wrap:wrap}
+.app-shell .customer-welcome {display:flex;justify-content:space-between;gap:32px;align-items:center;padding:30px;background:#e4e8da;margin-bottom:24px}
+.app-shell .customer-welcome h2 {font:400 36px/1.1 Georgia,serif;margin:12px 0}
+.app-shell .customer-welcome p {font-size:14px;color:#4d5f50}
+.app-shell .customer-welcome > div {max-width:55ch}
+.app-shell .detail-stages {list-style:none;margin:0;padding:0}
+.app-shell .detail-stage {display:grid;grid-template-columns:36px 1fr;gap:20px;padding:28px 0;border-top:1px solid #d8d9ce}
+.app-shell .detail-stage-number {font:14px var(--font-outlier);padding-top:4px;color:#a5442e}
+.app-shell .detail-stage-heading {display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:12px}
+.app-shell .detail-stage-heading h3 {font-size:20px}
+.app-shell .detail-stage p,.app-shell .detail-stage .duration-comparison {font-size:13px;line-height:1.8;color:#405046;margin:8px 0}
+.app-shell .detail-stage .stage-estimate {font-size:13px}
+.app-shell .detail-stage .detail-timestamps {font-size:11px;color:#59675d}
+.app-shell .detail-stage-queued {border-left:3px solid #a5442e;padding-left:16px;background:#f5eddf}
+.app-shell .detail-stage .button {margin-top:10px}
+.app-shell .resource-card select {width:100%;margin-top:8px}
+.app-shell .resource-grid {grid-template-columns:repeat(auto-fit,minmax(min(100%,250px),1fr))}
+.app-shell .resource-card h3 {font-size:22px}
+.app-shell .resource-compat>div>span {font-size:12px;line-height:1.7}
+.app-shell .resource-compat button {min-width:30px;min-height:30px}
+.app-shell .analytics-metric {padding:20px;background:#fbf9f4;min-width:0}
+.app-shell .analytics-live {background:#e4e8da;color:#243d34}
+.app-shell .system-state {font-size:9px}
+.app-shell .empty-state,.app-shell .empty-inline {border-style:solid;background:transparent}
+.app-shell .request-detail-link {display:inline-block;padding-block:8px;color:#8e402c;text-decoration:underline}
+.auth-shell .auth-panel h1 {font:400 clamp(44px,5vw,64px)/1.03 Georgia,serif;letter-spacing:-.04em}
+.auth-shell .auth-aside {background:#243d34;color:#f7f4ed}
+.auth-shell .auth-aside em {color:#e0b391;font-family:Georgia,serif;font-style:italic}
+.auth-shell .auth-aside .aside-index,.auth-shell .auth-aside .aside-flow {color:#ccd9cc}
+.modal-backdrop {background:#17261dcc}
+.modal-backdrop .modal {background:#fbf9f4;color:#1d2b24}
+.modal-backdrop .form-error,.auth-shell .form-error {color:#a62e2b}
+.modal-backdrop .modal-close {color:#1d2b24;min-width:44px;min-height:44px}
+.app-shell .topbar-menu {color:#243d34}
+@media(max-width:1100px){.app-shell .active-work-item{grid-template-columns:1fr 1fr}.app-shell .active-work-item>div:last-child{grid-column:1/-1}}
+@media(max-width:760px){
+ .app-shell .operations-brief,.app-shell .customer-welcome{flex-direction:column;align-items:stretch}
+ .app-shell .panel{padding:18px 14px}
+ .app-shell .active-work-item{grid-template-columns:1fr;gap:16px}
+ .app-shell .detail-stage{grid-template-columns:24px 1fr;gap:10px}
+ .app-shell .detail-stage-heading{align-items:start;flex-direction:column;gap:8px}
+ .app-shell .detail-stage-queued{padding-left:8px}
+ .app-shell .metric-card{padding:16px 10px}
+ .app-shell .metric-foot{line-height:1.5}
+ .app-shell .customer-welcome{padding:24px 18px}
+ .app-shell .analytics-metric{padding:14px}
+ .app-shell .request-table-hint{display:block;margin:0 0 8px;font-size:12px;color:#59675d}
+}
