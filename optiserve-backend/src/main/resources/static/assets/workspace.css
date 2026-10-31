@@ -7,9 +7,9 @@
  color:var(--color-ink);background:var(--color-paper);
 }
 .app-shell .app-sidebar {--color-paper-2:#345044;--color-ink:#f7f4ed;--color-accent:#e6b18c;--text-soft:#d9e1d7;--text-dim:#b7c7b9;--color-rule:#526958;--color-cool:#e6b18c;--color-ok:#9dc3a0;--color-bad:#f3b9a3;background:#243d34;color:#f7f4ed;overflow-y:auto}
-.app-shell .brand-mark,.auth-shell .brand-mark {background:#243d34;color:#fff;border:0;font:23px Georgia,serif}
+.app-shell .brand-mark,.auth-shell .brand-mark {background:#f1eee6;color:#fff;border:0;font:23px Georgia,serif}
 .app-shell .brand-mark i,.auth-shell .brand-mark i {display:none}
-.app-shell .brand-mark::before,.auth-shell .brand-mark::before {content:'O'}
+.app-shell .brand-mark::before,.auth-shell .brand-mark::before {content:none}
 .app-shell .app-sidebar .brand-mark {background:#f1eee6;color:#243d34}
 .app-shell .brand>span:last-child,.auth-shell .brand>span:last-child {font-size:14px;letter-spacing:.1em}
 .app-shell .page-heading h1 {font-size:clamp(28px,3vw,42px);font-weight:500;letter-spacing:-.04em}
