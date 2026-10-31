@@ -49,7 +49,7 @@ async function openAdminQueue(page, initialStatus = "ASSIGNED", role = "ADMIN") 
     await route.fulfill({ status, contentType: "application/json", body: JSON.stringify(body) });
   });
   await page.goto("/#/app/queue");
-  await expect(page.getByRole("heading", { name: role === "ADMIN" ? "Queue sequence" : "Your waiting stages" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: role === "ADMIN" ? "Waiting stages" : "Your waiting stages" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Assignment history" })).toBeVisible();
   return { calls };
 }
