@@ -439,6 +439,19 @@ If no compatible resource is available, the selected stage remains queued.
 
 Resource selection is deterministic by resource name and UUID after compatibility/availability filtering.
 
+## Scheduling decision trace
+
+Every manual `POST /api/assignments/next` invocation and every AUTO reconciliation records one immutable
+decision trace in the same transaction as the scheduling attempt. The trace stores the hybrid strategy
+version, the ordered candidate snapshots, score components, the candidates checked under lock, feasibility
+outcomes, and the final result. It contains operational UUIDs and status snapshots only; it does not copy
+customer names, phone numbers, or vehicle registration numbers.
+
+Administrators can review the history through `GET /api/admin/scheduling/decisions` and inspect one decision
+with `GET /api/admin/scheduling/decisions/{decisionId}`. Both endpoints are ADMIN-only and support bounded
+pagination; optional `from`, `to`, `trigger`, and `outcome` filters are available on the list endpoint.
+The trace is historical evidence, not live queue state, and is rolled back if the assignment transaction fails.
+
 ---
 
 # Service Execution
@@ -1020,6 +1033,13 @@ Service-request creation creates the workflow and ordered stages atomically. It 
 | `POST` | `/api/assignments/{assignmentId}/start` | Start assignment |
 | `POST` | `/api/assignments/{assignmentId}/complete` | Complete assignment |
 
+## Scheduling decisions (ADMIN only)
+
+| Method | Endpoint | Purpose |
+|---|---|---|
+| `GET` | `/api/admin/scheduling/decisions` | Browse immutable decision traces with bounded pagination and filters |
+| `GET` | `/api/admin/scheduling/decisions/{decisionId}` | Read one ordered candidate evaluation and feasibility trace |
+
 ---
 
 # Technology Stack
@@ -1353,6 +1373,7 @@ OptiServe is also designed to demonstrate concepts from multiple subjects.
 - [x] Reproducible ML training and held-out evaluation on the bundled synthetic dataset
 - [x] Admin operational analytics for persisted workshop activity
 - [x] Bounded application caching for service types and resource compatibility
+- [x] Immutable, admin-only scheduler decision traces with ranked score breakdowns
 
 The model evaluation uses the bundled synthetic dataset and documents its limits; those metrics are not evidence of real-world prediction accuracy.
 

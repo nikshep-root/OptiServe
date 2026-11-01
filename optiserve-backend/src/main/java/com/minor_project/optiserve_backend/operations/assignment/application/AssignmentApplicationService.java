@@ -16,13 +16,23 @@ import com.minor_project.optiserve_backend.operations.persistence.QueueEntryRepo
 import com.minor_project.optiserve_backend.operations.persistence.ResourceRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceStageRepository;
 import com.minor_project.optiserve_backend.operations.scheduler.domain.SchedulerStrategy;
+import com.minor_project.optiserve_backend.operations.scheduler.application.SchedulingDecisionRecorder;
+import com.minor_project.optiserve_backend.operations.scheduler.domain.SchedulerCandidateEvaluation;
+import com.minor_project.optiserve_backend.operations.scheduler.domain.SchedulingCandidateOutcome;
+import com.minor_project.optiserve_backend.operations.scheduler.domain.SchedulingCandidateReason;
+import com.minor_project.optiserve_backend.operations.scheduler.domain.SchedulingDecisionReason;
+import com.minor_project.optiserve_backend.operations.scheduler.domain.SchedulingDecisionResult;
+import com.minor_project.optiserve_backend.operations.scheduler.domain.SchedulingFeasibilityStatus;
+import com.minor_project.optiserve_backend.operations.scheduler.domain.SchedulingTrigger;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.Duration;
 import java.util.List;
+import java.util.ArrayList;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -35,7 +45,29 @@ public class AssignmentApplicationService {
     private final SchedulerStrategy schedulerStrategy;
     private final Clock clock;
     private final ApplicationEventPublisher eventPublisher;
+    private final SchedulingDecisionRecorder decisionRecorder;
 
+    @Autowired
+    public AssignmentApplicationService(
+            QueueEntryRepository queueEntryRepository,
+            ServiceStageRepository serviceStageRepository,
+            ResourceRepository resourceRepository,
+            AssignmentRepository assignmentRepository,
+            SchedulerStrategy schedulerStrategy,
+            Clock clock,
+            ApplicationEventPublisher eventPublisher,
+            SchedulingDecisionRecorder decisionRecorder) {
+        this.queueEntryRepository = queueEntryRepository;
+        this.serviceStageRepository = serviceStageRepository;
+        this.resourceRepository = resourceRepository;
+        this.assignmentRepository = assignmentRepository;
+        this.schedulerStrategy = schedulerStrategy;
+        this.clock = clock;
+        this.eventPublisher = eventPublisher;
+        this.decisionRecorder = decisionRecorder;
+    }
+
+    /** Compatibility constructor retained for focused unit tests that do not persist traces. */
     public AssignmentApplicationService(
             QueueEntryRepository queueEntryRepository,
             ServiceStageRepository serviceStageRepository,
@@ -44,41 +76,81 @@ public class AssignmentApplicationService {
             SchedulerStrategy schedulerStrategy,
             Clock clock,
             ApplicationEventPublisher eventPublisher) {
-        this.queueEntryRepository = queueEntryRepository;
-        this.serviceStageRepository = serviceStageRepository;
-        this.resourceRepository = resourceRepository;
-        this.assignmentRepository = assignmentRepository;
-        this.schedulerStrategy = schedulerStrategy;
-        this.clock = clock;
-        this.eventPublisher = eventPublisher;
+        this(queueEntryRepository, serviceStageRepository, resourceRepository, assignmentRepository,
+                schedulerStrategy, clock, eventPublisher, null);
     }
 
     @Transactional
     public AssignmentNextResponse assignNext() {
-        List<QueueEntry> rankedCandidates = schedulerStrategy.rankCandidates(
-                queueEntryRepository.findByStatusOrderByQueuedAtAsc(QueueEntryStatus.WAITING));
+        return assignNext(SchedulingTrigger.MANUAL_ASSIGN_NEXT);
+    }
+
+    @Transactional
+    public AssignmentNextResponse assignNext(SchedulingTrigger trigger) {
+        Instant evaluatedAt = Instant.now(clock);
+        List<QueueEntry> waitingEntries = queueEntryRepository.findByStatusOrderByQueuedAtAsc(QueueEntryStatus.WAITING);
+        List<SchedulerCandidateEvaluation> rankedCandidates = schedulerStrategy.evaluateCandidates(waitingEntries);
+        if (rankedCandidates == null || (rankedCandidates.isEmpty() && !waitingEntries.isEmpty())) {
+            List<QueueEntry> legacyRankedCandidates = schedulerStrategy.rankCandidates(waitingEntries);
+            if (legacyRankedCandidates == null) {
+                legacyRankedCandidates = List.of();
+            }
+            List<QueueEntry> legacyCandidates = legacyRankedCandidates;
+            rankedCandidates = java.util.stream.IntStream.range(0, legacyCandidates.size())
+                    .mapToObj(index -> SchedulerCandidateEvaluation.legacy(legacyCandidates.get(index), index))
+                    .toList();
+        }
         if (rankedCandidates.isEmpty()) {
+            recordDecision(evaluatedAt, trigger, SchedulingDecisionResult.NO_QUEUED_STAGE,
+                    SchedulingDecisionReason.NO_QUEUED_STAGE, null, null, List.of(), 0);
             return noAssignment(AssignmentNextResult.NO_QUEUED_STAGE);
         }
 
+        List<SchedulerCandidateEvaluation> snapshots = new ArrayList<>();
         boolean foundCurrentQueuedCandidate = false;
-        for (QueueEntry candidate : rankedCandidates) {
+        int evaluatedCandidateCount = 0;
+        for (int index = 0; index < rankedCandidates.size(); index++) {
+            SchedulerCandidateEvaluation candidateSnapshot = rankedCandidates.get(index);
+            QueueEntry candidate = candidateSnapshot.queueEntry();
             ServiceStage stage = serviceStageRepository.findByIdForUpdate(candidate.getServiceStage().getId())
                     .orElse(null);
             if (stage == null || stage.getStatus() != ServiceStageStatus.QUEUED) {
+                evaluatedCandidateCount++;
+                snapshots.add(candidateSnapshot.withDecision(
+                        SchedulingFeasibilityStatus.STALE, null, null,
+                        SchedulingCandidateOutcome.SKIPPED,
+                        SchedulingCandidateReason.STAGE_NO_LONGER_ELIGIBLE));
                 continue;
             }
-            QueueEntry queueEntry = queueEntryRepository
-                    .findByServiceStageIdAndStatus(stage.getId(), QueueEntryStatus.WAITING)
-                    .orElse(null);
+            java.util.Optional<QueueEntry> lockedQueueEntry = queueEntryRepository
+                    .findByServiceStageIdAndStatusForUpdate(stage.getId(), QueueEntryStatus.WAITING);
+            // A null result is only possible from legacy mocks; production repositories always return Optional.
+            if (lockedQueueEntry == null || lockedQueueEntry.isEmpty()) {
+                java.util.Optional<QueueEntry> legacyQueueEntry = queueEntryRepository
+                        .findByServiceStageIdAndStatus(stage.getId(), QueueEntryStatus.WAITING);
+                if (legacyQueueEntry != null && legacyQueueEntry.isPresent()) {
+                    lockedQueueEntry = legacyQueueEntry;
+                }
+            }
+            QueueEntry queueEntry = lockedQueueEntry.orElse(null);
             if (queueEntry == null) {
+                evaluatedCandidateCount++;
+                snapshots.add(candidateSnapshot.withDecision(
+                        SchedulingFeasibilityStatus.STALE, null, null,
+                        SchedulingCandidateOutcome.SKIPPED,
+                        SchedulingCandidateReason.QUEUE_ENTRY_NO_LONGER_WAITING));
                 continue;
             }
             foundCurrentQueuedCandidate = true;
+            evaluatedCandidateCount++;
 
             List<Resource> resources = resourceRepository.findByStatusAndCompatibleServiceTypesIdForUpdate(
                     ResourceStatus.AVAILABLE, stage.getServiceType().getId());
             if (resources.isEmpty()) {
+                snapshots.add(candidateSnapshot.withDecision(
+                        SchedulingFeasibilityStatus.INFEASIBLE, null, null,
+                        SchedulingCandidateOutcome.SKIPPED,
+                        SchedulingCandidateReason.RESOURCE_UNAVAILABLE));
                 continue;
             }
 
@@ -86,12 +158,47 @@ public class AssignmentApplicationService {
             Assignment assignment = Assignment.assign(stage, resource, Instant.now(clock), stage.getPredictedServiceDuration());
             queueEntry.remove();
             Assignment persistedAssignment = assignmentRepository.saveAndFlush(assignment);
+            snapshots.add(candidateSnapshot.withDecision(
+                    SchedulingFeasibilityStatus.FEASIBLE, ResourceStatus.AVAILABLE, resource.getId(),
+                    SchedulingCandidateOutcome.SELECTED, SchedulingCandidateReason.SELECTED));
+            for (int lowerIndex = index + 1; lowerIndex < rankedCandidates.size(); lowerIndex++) {
+                snapshots.add(rankedCandidates.get(lowerIndex).withDecision(
+                        SchedulingFeasibilityStatus.NOT_EVALUATED, null, null,
+                        SchedulingCandidateOutcome.NOT_EVALUATED,
+                        SchedulingCandidateReason.LOWER_RANKED_CANDIDATE));
+            }
+            recordDecision(evaluatedAt, trigger, SchedulingDecisionResult.ASSIGNED,
+                    SchedulingDecisionReason.ASSIGNED, stage.getId(), resource.getId(), snapshots,
+                    evaluatedCandidateCount);
             return assigned(persistedAssignment);
         }
 
-        return noAssignment(foundCurrentQueuedCandidate
-                ? AssignmentNextResult.NO_COMPATIBLE_RESOURCE
-                : AssignmentNextResult.NO_QUEUED_STAGE);
+        AssignmentNextResult result = foundCurrentQueuedCandidate
+                ? AssignmentNextResult.NO_COMPATIBLE_RESOURCE : AssignmentNextResult.NO_QUEUED_STAGE;
+        recordDecision(evaluatedAt, trigger,
+                result == AssignmentNextResult.NO_COMPATIBLE_RESOURCE
+                        ? SchedulingDecisionResult.NO_COMPATIBLE_RESOURCE
+                        : SchedulingDecisionResult.NO_QUEUED_STAGE,
+                result == AssignmentNextResult.NO_COMPATIBLE_RESOURCE
+                        ? SchedulingDecisionReason.NO_COMPATIBLE_RESOURCE
+                        : SchedulingDecisionReason.NO_QUEUED_STAGE,
+                null, null, snapshots, evaluatedCandidateCount);
+        return noAssignment(result);
+    }
+
+    private void recordDecision(
+            Instant evaluatedAt,
+            SchedulingTrigger trigger,
+            SchedulingDecisionResult result,
+            SchedulingDecisionReason reason,
+            UUID selectedStageId,
+            UUID selectedResourceId,
+            List<SchedulerCandidateEvaluation> candidates,
+            int evaluatedCandidateCount) {
+        if (decisionRecorder != null) {
+            decisionRecorder.record(evaluatedAt, trigger, result, reason, selectedStageId, selectedResourceId,
+                    candidates, evaluatedCandidateCount);
+        }
     }
 
     @Transactional(readOnly = true)

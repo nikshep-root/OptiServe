@@ -50,6 +50,19 @@ public final class HybridSchedulerStrategy implements SchedulerStrategy {
                 .toList();
     }
 
+    @Override
+    public List<SchedulerCandidateEvaluation> evaluateCandidates(Collection<QueueEntry> candidates) {
+        Objects.requireNonNull(candidates, "candidates must not be null");
+        Instant now = Instant.now(clock);
+        List<QueueEntry> ranked = candidates.stream()
+                .filter(HybridSchedulerStrategy::isQueuedCandidate)
+                .sorted(candidateComparator(now).reversed())
+                .toList();
+        return java.util.stream.IntStream.range(0, ranked.size())
+                .mapToObj(index -> evaluation(ranked.get(index), index, now))
+                .toList();
+    }
+
     SchedulerScore score(QueueEntry entry) {
         return score(entry, Instant.now(clock));
     }
@@ -64,6 +77,42 @@ public final class HybridSchedulerStrategy implements SchedulerStrategy {
         score += appointmentBonus(entry, now);
         score += durationBonus(entry.getServiceStage());
         return new SchedulerScore(false, score);
+    }
+
+    private SchedulerCandidateEvaluation evaluation(QueueEntry entry, int order, Instant now) {
+        PriorityClass priority = entry.getServiceRequest().getPriorityClass();
+        boolean critical = priority == PriorityClass.CRITICAL;
+        long base = critical ? 0 : basePriority(priority);
+        long aging = critical ? 0 : agingPoints(entry.getQueuedAt(), now);
+        long appointment = critical ? 0 : appointmentBonus(entry, now);
+        long duration = critical ? 0 : durationBonus(entry.getServiceStage());
+        long finalScore = critical ? 0 : base + aging + appointment + duration;
+        Instant appointmentAt = entry.getServiceRequest().getAppointmentAt();
+        boolean appointmentDue = priority == PriorityClass.APPOINTMENT
+                && appointmentAt != null && !appointmentAt.isAfter(now);
+        return new SchedulerCandidateEvaluation(
+                entry,
+                order,
+                entry.getStatus(),
+                entry.getServiceStage().getStatus(),
+                priority,
+                entry.getQueuedAt(),
+                Duration.ofSeconds(Math.max(0, Duration.between(entry.getQueuedAt(), now).getSeconds())),
+                appointmentAt,
+                appointmentDue,
+                entry.getServiceStage().getPredictedServiceDuration(),
+                entry.getServiceStage().getPredictionSource(),
+                critical,
+                base,
+                aging,
+                appointment,
+                duration,
+                finalScore,
+                SchedulingFeasibilityStatus.NOT_EVALUATED,
+                null,
+                null,
+                SchedulingCandidateOutcome.NOT_EVALUATED,
+                SchedulingCandidateReason.OTHER_VALIDATED_REASON);
     }
 
     private Comparator<QueueEntry> candidateComparator(Instant now) {
