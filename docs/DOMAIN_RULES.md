@@ -47,7 +47,13 @@ Among requests in the same criticality group, selection uses base priority plus 
 
 ## Resource Assignment
 
-The assignment operation asks the scheduler for one candidate, then assigns it only to a compatible `AVAILABLE` resource. Claiming the stage and resource, creating the `ASSIGNED` assignment, changing the stage to `ASSIGNED`, changing the resource to `BUSY`, and marking the queue entry `REMOVED` occur atomically. If no compatible resource is available, the selected stage remains queued. Active work is never preempted, and locking plus database constraints protect concurrent assignment attempts.
+The assignment operation evaluates scheduler-ranked candidates in order, then assigns the first candidate with a compatible `AVAILABLE` resource. A candidate that is currently unassignable remains queued and unchanged so a lower-ranked assignable candidate can progress. Claiming the stage and resource, creating the `ASSIGNED` assignment, changing the stage to `ASSIGNED`, changing the resource to `BUSY`, and marking the queue entry `REMOVED` occur atomically. If no compatible resource is available, the waiting candidates remain queued. Active work is never preempted, and locking plus database constraints protect concurrent assignment attempts.
+
+Each manual assignment attempt and AUTO reconciliation also writes one immutable decision trace in the same
+transaction. It records the deterministic candidate order, score breakdown, lock-time feasibility outcomes,
+and final result using operational identifiers and status snapshots only. Administrators can read the history
+through the ADMIN-only `/api/admin/scheduling/decisions` endpoints; a failed scheduling transaction rolls back
+its trace together with the operational changes.
 
 ## Service Execution
 

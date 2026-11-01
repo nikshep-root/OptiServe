@@ -9,6 +9,7 @@ import com.minor_project.optiserve_backend.operations.domain.ServiceStageStatus;
 import com.minor_project.optiserve_backend.operations.persistence.QueueEntryRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceStageRepository;
 import com.minor_project.optiserve_backend.operations.queue.application.QueueApplicationService;
+import com.minor_project.optiserve_backend.operations.scheduler.domain.SchedulingTrigger;
 import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -40,6 +41,11 @@ public class WorkshopAutomationCoordinator {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void reconcile() {
+        reconcile(SchedulingTrigger.AUTO_RECONCILIATION);
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void reconcile(SchedulingTrigger trigger) {
         WorkshopAutomationSettings settings = settingsRepository.findSingletonForUpdate(SINGLETON_ID)
                 .orElseThrow(() -> new IllegalStateException("Workshop automation setting is missing"));
         if (settings.getMode() != WorkshopAutomationMode.AUTO) {
@@ -52,7 +58,7 @@ public class WorkshopAutomationCoordinator {
         int assignmentAttempts = queueEntryRepository.findByStatusOrderByQueuedAtAsc(
                 com.minor_project.optiserve_backend.operations.domain.QueueEntryStatus.WAITING).size();
         for (int attempt = 0; attempt < assignmentAttempts; attempt++) {
-            if (assignmentApplicationService.assignNext().result() != AssignmentNextResult.ASSIGNED) {
+            if (assignmentApplicationService.assignNext(trigger).result() != AssignmentNextResult.ASSIGNED) {
                 break;
             }
         }

@@ -20,7 +20,7 @@ public class WorkshopAutomationEventListener {
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onAutomationRequested(WorkshopAutomationRequested event) {
         try {
-            coordinator.reconcile();
+            coordinator.reconcile(event.trigger());
         } catch (RuntimeException exception) {
             LOGGER.error("Workshop automation reconciliation failed; eligible work remains available for a later trigger",
                     exception);

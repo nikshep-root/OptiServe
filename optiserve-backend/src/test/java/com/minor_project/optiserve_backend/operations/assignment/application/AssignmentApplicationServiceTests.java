@@ -73,7 +73,6 @@ class AssignmentApplicationServiceTests {
     @Test
     void returnsNoQueuedStageWithoutWritingWhenSchedulerHasNoCandidate() {
         when(queueEntryRepository.findByStatusOrderByQueuedAtAsc(QueueEntryStatus.WAITING)).thenReturn(List.of());
-        when(schedulerStrategy.rankCandidates(List.of())).thenReturn(List.of());
 
         assertThat(service().assignNext().result()).isEqualTo(AssignmentNextResult.NO_QUEUED_STAGE);
         verify(assignmentRepository, never()).saveAndFlush(any());

@@ -29,6 +29,10 @@ import com.minor_project.optiserve_backend.operations.persistence.ResourceReposi
 import com.minor_project.optiserve_backend.operations.persistence.ServiceStageRepository;
 import com.minor_project.optiserve_backend.operations.persistence.ServiceTypeRepository;
 import com.minor_project.optiserve_backend.operations.persistence.VehicleRepository;
+import com.minor_project.optiserve_backend.operations.scheduler.persistence.SchedulingDecisionRepository;
+import com.minor_project.optiserve_backend.operations.scheduler.persistence.SchedulingCandidateEvaluationRepository;
+import com.minor_project.optiserve_backend.operations.scheduler.domain.SchedulingDecisionResult;
+import com.minor_project.optiserve_backend.operations.scheduler.domain.SchedulingTrigger;
 import com.minor_project.optiserve_backend.operations.queue.application.QueueApplicationService;
 import com.minor_project.optiserve_backend.operations.assignment.application.AssignmentApplicationService;
 import com.minor_project.optiserve_backend.operations.servicerequest.api.CreateServiceRequestRequest;
@@ -66,6 +70,8 @@ class AssignmentControllerIntegrationTests {
     @Autowired private AssignmentApplicationService assignmentService;
     @Autowired private EntityManager entityManager;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private SchedulingDecisionRepository schedulingDecisions;
+    @Autowired private SchedulingCandidateEvaluationRepository schedulingCandidates;
 
     @Test
     void customerCannotTriggerStaffAssignmentActions() throws Exception {
@@ -111,6 +117,19 @@ class AssignmentControllerIntegrationTests {
                 .andExpect(jsonPath("$.resourceId").value(resource.getId().toString()))
                 .andExpect(jsonPath("$.resourceName").value("Inspection Bay"))
                 .andExpect(jsonPath("$.assignmentStatus").value("ASSIGNED"));
+
+        var decision = schedulingDecisions.findAll().stream()
+                .max(java.util.Comparator.comparing(com.minor_project.optiserve_backend.operations.scheduler.persistence.SchedulingDecision::getEvaluatedAt))
+                .orElseThrow();
+        assertThat(decision.getTrigger()).isEqualTo(SchedulingTrigger.MANUAL_ASSIGN_NEXT);
+        assertThat(decision.getResult()).isEqualTo(SchedulingDecisionResult.ASSIGNED);
+        assertThat(decision.getSelectedStageId()).isEqualTo(request.stages().getFirst().id());
+        assertThat(schedulingCandidates.findByDecisionIdOrderByEvaluationOrderAsc(decision.getId()))
+                .singleElement()
+                .satisfies(candidate -> {
+                    assertThat(candidate.getOutcome()).hasToString("SELECTED");
+                    assertThat(candidate.getServiceStageId()).isEqualTo(request.stages().getFirst().id());
+                });
 
         assertThat(stages.findById(request.stages().getFirst().id()).orElseThrow().getStatus())
                 .isEqualTo(ServiceStageStatus.ASSIGNED);

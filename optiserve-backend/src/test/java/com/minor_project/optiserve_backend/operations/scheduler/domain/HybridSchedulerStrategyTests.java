@@ -121,6 +121,30 @@ class HybridSchedulerStrategyTests {
         assertThat(strategy().score(entry).value()).isEqualTo(NORMAL_SCORE_AFTER_TEN_MINUTES);
     }
 
+    @Test
+    void evaluationExposesTheSameOrderAndEveryScoreComponent() {
+        QueueEntry shortNormal = queued(PriorityClass.NORMAL, NOW.minus(Duration.ofMinutes(10)),
+                NOW.minus(Duration.ofHours(1)), Duration.ofMinutes(10), 1);
+        QueueEntry dueAppointment = queued(PriorityClass.APPOINTMENT, NOW.minus(Duration.ofMinutes(5)),
+                NOW.minus(Duration.ofHours(1)), Duration.ofMinutes(60), 2, NOW.minus(Duration.ofMinutes(1)));
+        QueueEntry critical = queued(PriorityClass.CRITICAL, NOW.minus(Duration.ofMinutes(1)),
+                NOW.minus(Duration.ofHours(1)), Duration.ofMinutes(60), 3);
+
+        List<SchedulerCandidateEvaluation> evaluations = strategy()
+                .evaluateCandidates(List.of(shortNormal, dueAppointment, critical));
+
+        assertThat(evaluations).extracting(SchedulerCandidateEvaluation::queueEntry)
+                .containsExactly(critical, dueAppointment, shortNormal);
+        SchedulerCandidateEvaluation due = evaluations.get(1);
+        assertThat(due.basePriorityPoints()).isEqualTo(200);
+        assertThat(due.agingPoints()).isEqualTo(5);
+        assertThat(due.appointmentBonusPoints()).isEqualTo(25);
+        assertThat(due.durationBonusPoints()).isZero();
+        assertThat(due.finalScore()).isEqualTo(230);
+        assertThat(evaluations.getFirst().critical()).isTrue();
+        assertThat(evaluations.getFirst().finalScore()).isZero();
+    }
+
     private static final long NORMAL_SCORE_AFTER_TEN_MINUTES = 110;
 
     private HybridSchedulerStrategy strategy() {
