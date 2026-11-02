@@ -15,6 +15,7 @@ const icon = (name, size = 18) => {
     check: '<path d="m5 12 4 4L19 6"/>',
     plus: '<path d="M12 5v14M5 12h14"/>',
     menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+    trace: '<path d="M5 5h14M5 12h8M5 19h14"/><circle cx="17" cy="12" r="2"/>',
   };
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || paths.grid}</svg>`;
 };
@@ -442,7 +443,7 @@ function authPage(mode = "login") {
 function dashboardShell(active = "overview") {
   const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
   const nav = admin
-    ? [["overview", "Workshop overview", "grid"], ["work", "Active work", "wrench"], ["history", "Service history", "clock"], ["analytics", "Analytics", "grid"], ["automation", "Automation", "check"], ["requests", "Service requests", "layers"], ["queue", "Live queue", "clock"], ["resources", "Resources", "wrench"], ["service-types", "Service types", "layers"]]
+    ? [["overview", "Workshop overview", "grid"], ["work", "Active work", "wrench"], ["history", "Service history", "clock"], ["decisions", "Decision Trace", "trace"], ["analytics", "Analytics", "grid"], ["automation", "Automation", "check"], ["requests", "Service requests", "layers"], ["queue", "Live queue", "clock"], ["resources", "Resources", "wrench"], ["service-types", "Service types", "layers"]]
     : [["overview", "Overview", "grid"], ["requests", "Service requests", "layers"], ["queue", "My service queue", "clock"], ["vehicles", "My vehicles", "wrench"], ["profile", "Profile", "grid"]];
   return `<div class="app-shell ${admin ? "workshop-app" : "customer-app"}"><aside class="app-sidebar" id="sidebar"><div class="sidebar-brand">${brand(true)}<span>${admin ? "WORKSHOP" : "CUSTOMER"}</span></div><div class="sidebar-caption">${admin ? "Workshop operations" : "Your service account"}</div><nav class="app-nav" aria-label="Operations navigation">${nav.map(([id, label, glyph]) => `<a href="#/app/${id}" class="${active === id ? "selected" : ""}" ${active === id ? 'aria-current="page"' : ""}>${icon(glyph, 17)}<span>${label}</span>${id === "queue" ? '<i class="nav-dot"></i>' : ""}</a>`).join("")}</nav><div class="sidebar-spacer"></div><div class="sidebar-foot"><div class="system-state"><i></i><span>API CONNECTION</span><b id="connection-label">CHECKING</b></div><button id="sign-out" class="sign-out">${icon("logout", 16)} Sign out</button></div></aside><div class="app-main"><header class="app-topbar"><button class="topbar-menu" id="menu-toggle" type="button" aria-label="Toggle navigation" aria-controls="sidebar" aria-expanded="false">${icon("menu")}</button><div class="breadcrumbs"><span>OPTISERVE</span><i>/</i><strong>${nav.find(([id]) => id === active)?.[1] || "Overview"}</strong></div><div class="topbar-right"><span class="topbar-date">${new Intl.DateTimeFormat(undefined, { weekday: "long", month: "short", day: "numeric" }).format(new Date())}</span><span class="avatar">OP</span></div></header><main class="dashboard-content" id="dashboard-content"><div class="dashboard-loading" role="status"><span class="spinner"></span><p>Loading this view…</p></div></main></div></div>`;
 }
@@ -453,6 +454,7 @@ let activeDashboardPage = "overview";
 let dashboardLoadVersion = 0;
 let dashboardUpdatedAt = null;
 let analyticsRange = null;
+let decisionFilters = { from: "", to: "", trigger: "", outcome: "", page: 0, size: 25 };
 let validatedSessionToken = null;
 let sessionValidationToken = null;
 let sessionValidationPromise = null;
@@ -494,7 +496,7 @@ function validateDashboardSession(token) {
 }
 
 function dashboardPageAllowed(page, role) {
-  const adminOnly = ["analytics", "automation", "resources", "service-types", "work", "history"];
+  const adminOnly = ["analytics", "automation", "resources", "service-types", "work", "history", "decisions"];
   const customerOnly = ["vehicles", "profile"];
   return !(role === "ADMIN" && customerOnly.includes(page)) && !(role === "USER" && adminOnly.includes(page));
 }
@@ -543,6 +545,12 @@ async function loadDashboard() {
   if (admin) { calls.resources = "/api/resources"; calls.automation = "/api/admin/workshop-automation"; }
   else { calls.customer = "/api/customers/me"; calls.vehicles = "/api/vehicles"; }
   if (admin && page === "analytics") calls.analytics = `/api/admin/analytics?from=${encodeURIComponent(analyticsRange.from)}&to=${encodeURIComponent(analyticsRange.to)}`;
+  if (admin && page === "decisions") {
+    const decisionId = decodeURIComponent(location.hash.split("/")[3] || "");
+    calls.decisions = decisionId
+      ? `/api/admin/scheduling/decisions/${encodeURIComponent(decisionId)}`
+      : schedulingDecisionListPath();
+  }
   document.querySelectorAll('[data-action="refresh"], [data-action="retry"]').forEach(button => button.disabled = true);
   const names = Object.keys(calls);
   const outcomes = await Promise.allSettled(names.map(name => api(calls[name])));
@@ -555,8 +563,13 @@ async function loadDashboard() {
   if (outcomes.some(result => result.status === "rejected" && result.reason.status === 401)) {
     expireDashboardSession(); return;
   }
+  if (page === "decisions") {
+    const decisionOutcome = outcomes[names.indexOf("decisions")];
+    if (decisionOutcome?.status === "rejected" && decisionOutcome.reason.status === 401) { expireDashboardSession(); return; }
+    if (decisionOutcome?.status === "fulfilled") dashboardData.decisionTrace = decisionOutcome.value;
+  }
   const successes = outcomes.filter(result => result.status === "fulfilled").length;
-  const coreUnavailable = ["requests", "queue"].some(name => dashboardData.errors[name]);
+  const coreUnavailable = ["requests", "queue"].some(name => dashboardData.errors[name]) || (page === "decisions" && Boolean(dashboardData.errors.decisions));
   const connection = document.querySelector("#connection-label");
   if (connection) connection.textContent = coreUnavailable ? (successes ? "PARTIAL" : "UNAVAILABLE") : "CONNECTED";
   document.querySelector(".system-state")?.classList.toggle("disconnected", coreUnavailable);
@@ -570,6 +583,94 @@ async function loadDashboard() {
   if (waits.some(([,wait]) => wait.status === 401)) { expireDashboardSession(); return; }
   dashboardData.waits = Object.fromEntries(waits);
   renderDashboard(page);
+}
+
+function schedulingDecisionListPath() {
+  const params = new URLSearchParams({ page: String(decisionFilters.page), size: String(decisionFilters.size) });
+  if (decisionFilters.from) params.set("from", `${decisionFilters.from}T00:00:00Z`);
+  if (decisionFilters.to) {
+    const exclusive = new Date(`${decisionFilters.to}T00:00:00Z`);
+    exclusive.setUTCDate(exclusive.getUTCDate() + 1);
+    params.set("to", exclusive.toISOString());
+  }
+  if (decisionFilters.trigger) params.set("trigger", decisionFilters.trigger);
+  if (decisionFilters.outcome) params.set("outcome", decisionFilters.outcome);
+  return `/api/admin/scheduling/decisions?${params.toString()}`;
+}
+
+function humanCode(value) {
+  if (value == null || value === "") return "Not recorded";
+  const known = {
+    ASSIGNED: "Assignment successful", NO_QUEUED_STAGE: "No queued stage", NO_COMPATIBLE_RESOURCE: "No compatible resource",
+    MANUAL_ASSIGN_NEXT: "Manual assign next", AUTO_RECONCILIATION: "Automatic reconciliation",
+    RESOURCE_UNAVAILABLE: "Resource unavailable", STAGE_NO_LONGER_ELIGIBLE: "Stage no longer eligible",
+    QUEUE_ENTRY_NO_LONGER_WAITING: "Queue entry no longer waiting", LOWER_RANKED_CANDIDATE: "Ranked lower",
+    OTHER_VALIDATED_REASON: "Other validated reason", SELECTED: "Selected", SKIPPED: "Skipped",
+    NOT_EVALUATED: "Not evaluated", FEASIBLE: "Feasible", INFEASIBLE: "Infeasible", STALE: "Stale",
+    AVAILABLE: "Available", BUSY: "Busy", OFFLINE: "Offline", NORMAL: "Normal", HIGH: "High", CRITICAL: "Critical",
+  };
+  return known[value] || String(value).toLowerCase().replaceAll("_", " ").replace(/(^|\s)\S/g, (letter) => letter.toUpperCase());
+}
+
+function recordedNumber(value, suffix = "") {
+  return value == null || value === "" ? "Not recorded" : `${escapeHtml(value)}${suffix}`;
+}
+
+function decisionOutcomeClass(value) {
+  return value === "ASSIGNED" ? "status-available" : "status-offline";
+}
+
+function decisionExplanationHeading(result) {
+  const headings = {
+    ASSIGNED: "Why was this candidate selected?",
+    NO_COMPATIBLE_RESOURCE: "Why couldn't OPTISERVE assign this work?",
+    NO_QUEUED_STAGE: "Why was no assignment made?",
+  };
+  return headings[result] || `Why did the scheduler record ${humanCode(result).toLowerCase()}?`;
+}
+
+function decisionHistoryPage() {
+  const payload = dashboardData.decisionTrace;
+  if (dashboardData.errors.decisions) return errorPanel("Decision history unavailable", displayError(dashboardData.errors.decisions));
+  if (!payload) return '<div class="dashboard-loading" role="status"><span class="spinner"></span><p>Loading scheduling decisions…</p></div>';
+  const rows = payload.content || [];
+  const total = Number(payload.totalElements || 0);
+  const first = total ? payload.page * payload.size + 1 : 0;
+  const last = Math.min(total, (payload.page + 1) * payload.size);
+  return `<section class="decision-intro"><span class="panel-kicker">Persisted scheduler evaluations</span><span class="decision-count">${total.toLocaleString()} recorded decisions</span></section>
+    <form class="decision-filters" id="decision-filters" aria-label="Filter decision history"><label>From<input type="date" name="from" value="${escapeHtml(decisionFilters.from)}"></label><label>To<input type="date" name="to" value="${escapeHtml(decisionFilters.to)}"></label><label>Trigger<select name="trigger"><option value="">All triggers</option><option value="MANUAL_ASSIGN_NEXT" ${decisionFilters.trigger === "MANUAL_ASSIGN_NEXT" ? "selected" : ""}>Manual</option><option value="AUTO_RECONCILIATION" ${decisionFilters.trigger === "AUTO_RECONCILIATION" ? "selected" : ""}>Auto reconciliation</option></select></label><label>Result<select name="outcome"><option value="">All results</option><option value="ASSIGNED" ${decisionFilters.outcome === "ASSIGNED" ? "selected" : ""}>Assigned</option><option value="NO_QUEUED_STAGE" ${decisionFilters.outcome === "NO_QUEUED_STAGE" ? "selected" : ""}>No queued stage</option><option value="NO_COMPATIBLE_RESOURCE" ${decisionFilters.outcome === "NO_COMPATIBLE_RESOURCE" ? "selected" : ""}>No compatible resource</option></select></label><button class="button button-lime" type="submit">Apply filters</button><button class="button button-outline" type="button" data-action="clear-decision-filters">Clear</button></form>
+    ${rows.length ? `<div class="decision-list" aria-label="Scheduling decisions">${rows.map((item) => `<a class="decision-row" href="#/app/decisions/${encodeURIComponent(item.id)}"><div class="decision-time"><span>${escapeHtml(formatDate(item.evaluatedAt))}</span><small>${escapeHtml(String(item.id || "").slice(0, 8))}</small></div><div class="decision-main"><div class="decision-badges"><span class="status-tag">${escapeHtml(humanCode(item.trigger))}</span><span class="status-tag ${decisionOutcomeClass(item.result)}">${escapeHtml(humanCode(item.result))}</span></div><p>${item.selectedStageId ? `Selected stage <strong>${escapeHtml(String(item.selectedStageId).slice(0, 8))}</strong>` : escapeHtml(humanCode(item.reason))}${item.selectedResourceId ? ` · Resource <strong>${escapeHtml(String(item.selectedResourceId).slice(0, 8))}</strong>` : ""}</p><small>${escapeHtml(humanCode(item.reason))}</small></div><div class="decision-volume"><strong>${recordedNumber(item.evaluatedCandidateCount)} / ${recordedNumber(item.candidateCount)}</strong><small>evaluated / candidates</small></div><span class="decision-open" aria-hidden="true">→</span></a>`).join("")}</div>` : `<div class="empty-state decision-empty"><h3>No scheduling decisions in this range</h3><p>Adjust the filters or return to the full decision history.</p></div>`}
+    <nav class="decision-pagination" aria-label="Decision history pagination"><span>Showing ${first}–${last} of ${total}</span><div><button class="button button-outline" data-action="decision-prev" ${payload.page <= 0 ? "disabled" : ""}>Previous</button><span>Page ${total ? payload.page + 1 : 0} of ${payload.totalPages || 0}</span><button class="button button-outline" data-action="decision-next" ${payload.page + 1 >= (payload.totalPages || 0) ? "disabled" : ""}>Next</button></div></nav>`;
+}
+
+function decisionDetailPage() {
+  const id = decodeURIComponent(location.hash.split("/")[3] || "");
+  const payload = dashboardData.decisionTrace;
+  if (dashboardData.errors.decisions) return `<a class="panel-link decision-back" href="#/app/decisions">← Decision history</a>${errorPanel("Decision detail unavailable", displayError(dashboardData.errors.decisions))}`;
+  if (!payload?.summary) return '<div class="dashboard-loading" role="status"><span class="spinner"></span><p>Loading the recorded evaluation…</p></div>';
+  const s = payload.summary;
+  const candidates = Array.isArray(payload.candidates) ? payload.candidates : [];
+  const selected = candidates.find((candidate) => candidate.outcome === "SELECTED") || null;
+  const skippedCandidates = candidates.filter((candidate) => candidate.outcome === "SKIPPED");
+  const explanationCandidates = selected ? skippedCandidates : candidates;
+  const allEvaluatedAndSkipped = candidates.length > 0
+    && skippedCandidates.length === candidates.length
+    && Number(s.evaluatedCandidateCount) === Number(s.candidateCount)
+    && candidates.length === Number(s.candidateCount);
+  const candidateMarkup = candidates.map((candidate) => `<details class="candidate-trace" ${candidate.outcome === "SELECTED" ? "open" : ""}><summary><span class="candidate-order">${String(candidate.evaluationOrder).padStart(2, "0")}</span><span class="candidate-heading"><strong>Service stage ${escapeHtml(String(candidate.serviceStageId || "—").slice(0, 8))}</strong><small>Work order ${escapeHtml(String(candidate.serviceRequestId || "—").slice(0, 8))} · ${escapeHtml(humanCode(candidate.priorityClass))}${candidate.critical ? " · CRITICAL precedence" : ""}</small></span><span class="status-tag ${candidate.outcome === "SELECTED" ? "status-available" : ""}">${escapeHtml(humanCode(candidate.outcome))}</span><span class="candidate-score">${candidate.critical ? "Priority" : candidate.finalScore == null ? "Score not recorded" : `${escapeHtml(candidate.finalScore)} pts`}</span></summary><div class="candidate-body"><div class="candidate-stage-grid"><section><h4>Recorded order & queue</h4><p>Evaluation order <strong>${recordedNumber(candidate.evaluationOrder)}</strong></p><p>Queue entry <code>${escapeHtml(candidate.queueEntryId || "Not recorded")}</code></p><p>Queue status <strong>${escapeHtml(humanCode(candidate.queueStatus))}</strong></p><p>Stage status <strong>${escapeHtml(humanCode(candidate.stageStatus))}</strong></p><p>Waiting age <strong>${recordedNumber(candidate.waitingAgeMinutes, " min")}</strong></p><p>Appointment <strong>${candidate.appointmentDue ? "Due" : "Not due"}</strong>${candidate.appointmentAt ? ` · ${escapeHtml(formatDate(candidate.appointmentAt))}` : ""}</p></section><section><h4>Recorded score inputs</h4><p>Base priority <strong>${recordedNumber(candidate.basePriorityPoints, " pts")}</strong></p><p>Waiting age <strong>${recordedNumber(candidate.agingPoints, " pts")}</strong></p><p>Appointment bonus <strong>${recordedNumber(candidate.appointmentBonusPoints, " pts")}</strong></p><p>Predicted duration bonus <strong>${recordedNumber(candidate.durationBonusPoints, " pts")}</strong></p><p>Total score <strong>${recordedNumber(candidate.finalScore, " pts")}</strong></p>${candidate.critical ? '<p class="critical-note">CRITICAL precedence is evaluated separately from the numeric score.</p>' : ""}</section><section><h4>Resource feasibility</h4><p>Feasibility <strong>${escapeHtml(humanCode(candidate.feasibilityStatus))}</strong></p><p>Observed availability <strong>${escapeHtml(humanCode(candidate.observedResourceStatus))}</strong></p><p>Matched resource <strong>${candidate.matchedResourceId ? escapeHtml(candidate.matchedResourceId) : "Not recorded"}</strong></p><p>Reason <strong>${escapeHtml(humanCode(candidate.reason))}</strong></p></section></div><p class="candidate-prediction">Predicted duration ${candidate.predictedServiceDuration ? `<strong>${escapeHtml(candidate.predictedServiceDuration)}</strong>` : "not recorded"} · provenance <strong>${escapeHtml(humanCode(candidate.predictionSource))}</strong></p><div class="decision-process"><span>Scheduler order <b>${recordedNumber(candidate.evaluationOrder)}</b></span><span>Stage / queue state <b>${escapeHtml(humanCode(candidate.stageStatus))} / ${escapeHtml(humanCode(candidate.queueStatus))}</b></span><span>Resource feasibility <b>${escapeHtml(humanCode(candidate.feasibilityStatus))}</b></span><span>Recorded outcome <b>${escapeHtml(humanCode(candidate.outcome))} · ${escapeHtml(humanCode(candidate.reason))}</b></span></div></div></details>`).join("");
+  return `<a class="panel-link decision-back" href="#/app/decisions">← Decision history</a><section class="decision-overview"><div><span class="panel-kicker">Decision / ${escapeHtml(String(s.id || id))}</span><h2>${escapeHtml(humanCode(s.result))}</h2><p>${escapeHtml(formatDate(s.evaluatedAt))} · ${escapeHtml(humanCode(s.trigger))}</p></div><span class="status-tag ${decisionOutcomeClass(s.result)}">${escapeHtml(humanCode(s.result))}</span><div class="decision-overview-facts"><div><small>Selected stage</small><strong>${s.selectedStageId ? escapeHtml(s.selectedStageId) : "None recorded"}</strong></div><div><small>Selected resource</small><strong>${s.selectedResourceId ? escapeHtml(s.selectedResourceId) : "None recorded"}</strong></div><div><small>Candidates evaluated</small><strong>${Number(s.evaluatedCandidateCount || 0)} / ${Number(s.candidateCount || 0)}</strong></div><div><small>Reason</small><strong>${escapeHtml(humanCode(s.reason))}</strong></div><div><small>Strategy</small><strong>${escapeHtml(s.strategyName || "Not recorded")}${s.strategyVersion ? ` · ${escapeHtml(s.strategyVersion)}` : ""}</strong></div></div></section>
+    <section class="decision-section"><div class="decision-section-heading"><span>01</span><div><h3>${escapeHtml(decisionExplanationHeading(s.result))}</h3><p>Values shown here are the immutable evaluation snapshot recorded at decision time.</p></div></div>${selected ? `<div class="selected-candidate"><span class="panel-kicker">Selected candidate · evaluation ${escapeHtml(selected.evaluationOrder)}</span><h4>Service stage ${escapeHtml(selected.serviceStageId || "Not recorded")}</h4><p>Work order ${escapeHtml(selected.serviceRequestId || "Not recorded")} · ${escapeHtml(humanCode(selected.priorityClass))}</p>${selected.critical ? '<p class="critical-note">CRITICAL precedence was evaluated separately from its numeric score.</p>' : `<p>Score ${escapeHtml(selected.basePriorityPoints)} base + ${escapeHtml(selected.agingPoints)} aging + ${escapeHtml(selected.appointmentBonusPoints)} appointment + ${escapeHtml(selected.durationBonusPoints)} predicted-duration bonus = <strong>${escapeHtml(selected.finalScore)} points</strong></p>`}<p>Predicted service duration ${selected.predictedServiceDuration ? `<strong>${escapeHtml(selected.predictedServiceDuration)}</strong>` : "not recorded"} · provenance ${escapeHtml(humanCode(selected.predictionSource))}</p><p>Resource ${selected.matchedResourceId ? escapeHtml(selected.matchedResourceId) : "not recorded"} · availability at evaluation ${escapeHtml(humanCode(selected.observedResourceStatus))}</p></div>` : `<div class="empty-state"><h4>No candidate was selected</h4><p>${escapeHtml(humanCode(s.reason))}. The detail contains ${candidates.length} recorded candidate evaluations.</p></div>`}</section>
+    <section class="decision-section"><div class="decision-section-heading"><span>02</span><div><h3>Candidate evaluation timeline</h3><p>Candidate order is preserved exactly as returned by the API. Expand a row to inspect the distinct queue, feasibility, and outcome records.</p></div></div>${candidates.length ? `<div class="candidate-timeline">${candidateMarkup}</div>` : '<div class="empty-state"><p>No candidate evaluations were recorded for this decision.</p></div>'}</section>
+    <section class="decision-section"><div class="decision-section-heading"><span>03</span><div><h3>${selected ? "Why were other candidates skipped?" : candidates.length ? "Why candidates remained unassigned" : "Candidate evaluation outcome"}</h3><p>${allEvaluatedAndSkipped ? `All ${candidates.length} candidates were evaluated and skipped. Each recorded reason appears below.` : "Only backend-recorded outcomes and reason codes are shown."}</p></div></div>${explanationCandidates.length ? `<ul class="skip-reasons">${explanationCandidates.map((candidate) => {
+      const continuedToSelection = selected && Number(selected.evaluationOrder) > Number(candidate.evaluationOrder);
+      const explanation = candidate.reason === "LOWER_RANKED_CANDIDATE"
+        ? "Recorded as a lower-ranked candidate."
+        : continuedToSelection
+          ? "Evaluation continued to a later candidate, which was selected."
+          : `Feasibility: ${humanCode(candidate.feasibilityStatus)} · queue: ${humanCode(candidate.queueStatus)} · stage: ${humanCode(candidate.stageStatus)}`;
+      return `<li><strong>Stage ${escapeHtml(String(candidate.serviceStageId || "—").slice(0, 8))}</strong><span>${escapeHtml(humanCode(candidate.outcome))} · ${escapeHtml(humanCode(candidate.reason))}</span><small>${escapeHtml(explanation)}</small></li>`;
+    }).join("")}</ul>` : '<div class="empty-state"><p>No skipped-candidate records were included in this decision.</p></div>'}</section>
+    <section class="decision-section"><div class="decision-section-heading"><span>04</span><div><h3>Resource selection</h3><p>Resource identity and observed status from the persisted candidate snapshot.</p></div></div>${selected ? `<div class="resource-explanation"><p>Selected resource <strong>${escapeHtml(s.selectedResourceId || selected.matchedResourceId || "Not recorded")}</strong></p><p>Observed status <strong>${escapeHtml(humanCode(selected.observedResourceStatus))}</strong> · feasibility <strong>${escapeHtml(humanCode(selected.feasibilityStatus))}</strong></p><p>Compatibility is represented by recorded feasibility. This API response contains no resource name or separate compatibility narrative.</p></div>` : '<div class="empty-state"><p>No resource was selected in this decision.</p></div>'}</section>`;
 }
 
 function renderCustomerProfileSetup() {
@@ -796,11 +897,12 @@ function overviewMetrics(admin) {
 
 function renderDashboard(page = "overview") {
   const admin = sessionStorage.getItem(ROLE_KEY) === "ADMIN";
-  const titles = {overview: admin ? "Workshop overview" : "My service overview", work:"Active work", history:"Service history", request:"Service work order", analytics:"Operational analytics", automation:"Workshop automation",requests:"Service requests",queue:admin ? "Live queue" : "My service queue",resources:"Resources","service-types":"Service types",vehicles:"My vehicles",profile:"Customer profile"};
+  const titles = {overview: admin ? "Workshop overview" : "My service overview", work:"Active work", history:"Service history", decisions:"Decision Trace", request:"Service work order", analytics:"Operational analytics", automation:"Workshop automation",requests:"Service requests",queue:admin ? "Live queue" : "My service queue",resources:"Resources","service-types":"Service types",vehicles:"My vehicles",profile:"Customer profile"};
   const queuePanel = `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">Waiting work</span><h2>${admin ? "Waiting stages" : "Your waiting stages"}</h2><p>Listed by queue arrival, not assignment rank. Priority, aging and resource compatibility affect the next assignment.</p></div>${admin ? `<button class="button button-outline" data-action="assign-next">Assign next ${icon("arrow",15)}</button>` : ""}</div>${queueRows()}</section>`;
   const requestsPanel = `<section class="panel"><div class="panel-heading"><div><span class="panel-kicker">Service work orders</span><h2>Service requests</h2><p>Open a work order to see each stage, resource and recorded duration.</p></div><div class="panel-actions"><label class="search-box">${icon("search",16)}<input id="request-search" type="search" placeholder="Search vehicles or service" aria-label="Search service requests"></label><select class="status-filter" id="request-status-filter" aria-label="Filter by request status"><option value="">All statuses</option>${["CREATED","WAITING","ASSIGNED","IN_SERVICE","COMPLETED","CANCELLED","NO_SHOW"].map(status=>`<option value="${status}">${status.replaceAll("_"," ")}</option>`).join("")}</select>${admin ? "" : `<button class="button button-outline" data-action="new-request">New request ${icon("plus",15)}</button>`}</div></div>${requestTable()}</section>`;
   let content;
-  if (page === "request") content = workOrderDetail();
+  if (page === "decisions" && admin) content = decodeURIComponent(location.hash.split("/")[3] || "") ? decisionDetailPage() : decisionHistoryPage();
+  else if (page === "request") content = workOrderDetail();
   else if(page === "work" && admin) content = activeWorkPanel();
   else if(page === "history" && admin) content = assignmentsPanel("history");
   else if(page === "analytics" && admin) content = analyticsPage();
@@ -814,7 +916,7 @@ function renderDashboard(page = "overview") {
   else if(admin) content = `<div class="operations-brief"><p><strong>${dashboardData.automation?.mode === "AUTO" ? "Automatic operations" : dashboardData.automation?.mode === "MANUAL" ? "Manual operations" : "Operating mode unavailable"}</strong><span> Review waiting work and keep assigned services moving.</span></p><a href="#/app/automation">Workshop settings ${icon("arrow",14)}</a></div>${activeWorkPanel()}${queuePanel}<section id="assignment-result"></section>${requestsPanel}`;
   else content = `<section class="customer-welcome"><div><p>Your service, step by step</p><h2>${dashboardData.customer?.name ? "Welcome, " + escapeHtml(dashboardData.customer.name) + "." : "Your next service starts here."}</h2><p>Register a vehicle, request its services and follow each stage through the workshop.</p></div><button class="button button-lime" data-action="new-request">New service request ${icon("plus",15)}</button></section>${requestsPanel}${queuePanel}`;
   const failed = Object.keys(dashboardData.errors).length;
-  document.querySelector("#dashboard-content").innerHTML = `<div class="page-heading"><div><span class="eyebrow">${admin ? "Workshop operations" : "Your service account"}</span><h1>${titles[page] || titles.overview}</h1><p>${page === "analytics" ? "Historical results, with current workshop state shown separately." : "A current snapshot. Refresh or complete an action to update."}</p></div><div class="page-heading-actions"><span class="refresh-time">${dashboardUpdatedAt ? "Fetched " + new Intl.DateTimeFormat(undefined,{timeStyle:"short"}).format(dashboardUpdatedAt) : "Data unavailable"}</span><button class="button button-lime" data-action="refresh">Refresh data ${icon("arrow",15)}</button></div></div>${failed ? `<div class="partial-warning" role="status">${failed} data source${failed===1 ? " is" : "s are"} unavailable. Missing values are not shown as zero.</div>` : ""}${page === "overview" ? overviewMetrics(admin) : ""}${content}<p class="api-footnote">Service duration is an estimate of the work. Waiting time is calculated separately from queue and resource state.</p>`;
+  document.querySelector("#dashboard-content").innerHTML = `<div class="page-heading"><div><span class="eyebrow">${admin ? "Workshop operations" : "Your service account"}</span><h1>${titles[page] || titles.overview}</h1><p>${page === "decisions" ? "Understand how OPTISERVE evaluates work, prioritizes service stages, and assigns workshop resources." : page === "analytics" ? "Historical results, with current workshop state shown separately." : "A current snapshot. Refresh or complete an action to update."}</p></div><div class="page-heading-actions"><span class="refresh-time">${dashboardUpdatedAt ? "Fetched " + new Intl.DateTimeFormat(undefined,{timeStyle:"short"}).format(dashboardUpdatedAt) : "Data unavailable"}</span><button class="button button-lime" data-action="refresh">Refresh data ${icon("arrow",15)}</button></div></div>${failed && page !== "decisions" ? `<div class="partial-warning" role="status">${failed} data source${failed===1 ? " is" : "s are"} unavailable. Missing values are not shown as zero.</div>` : ""}${page === "overview" ? overviewMetrics(admin) : ""}${content}${page === "decisions" ? "" : '<p class="api-footnote">Service duration is an estimate of the work. Waiting time is calculated separately from queue and resource state.</p>'}`;
   wireDashboardActions();
 }
 
@@ -874,6 +976,26 @@ function wireDashboardActions() {
     analyticsRange = { from, to };
     loadDashboard();
   });
+  document.querySelector("#decision-filters")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    const values = new FormData(event.currentTarget);
+    const from = String(values.get("from") || "");
+    const to = String(values.get("to") || "");
+    if (from && to && from > to) {
+      event.currentTarget.elements.to.setCustomValidity("Choose an end date on or after the start date.");
+      event.currentTarget.elements.to.reportValidity();
+      return;
+    }
+    event.currentTarget.elements.to.setCustomValidity("");
+    decisionFilters = { ...decisionFilters, from, to, trigger: String(values.get("trigger") || ""), outcome: String(values.get("outcome") || ""), page: 0 };
+    loadDashboard();
+  });
+  document.querySelector('[data-action="clear-decision-filters"]')?.addEventListener("click", () => {
+    decisionFilters = { from: "", to: "", trigger: "", outcome: "", page: 0, size: 25 };
+    loadDashboard();
+  });
+  document.querySelector('[data-action="decision-prev"]')?.addEventListener("click", () => { decisionFilters.page = Math.max(0, decisionFilters.page - 1); loadDashboard(); });
+  document.querySelector('[data-action="decision-next"]')?.addEventListener("click", () => { decisionFilters.page += 1; loadDashboard(); });
   document.querySelector("#request-search")?.addEventListener("input", (event) => {
     filterRequests();
   });
