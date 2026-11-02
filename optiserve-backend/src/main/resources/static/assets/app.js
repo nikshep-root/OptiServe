@@ -587,10 +587,13 @@ async function loadDashboard() {
 
 function schedulingDecisionListPath() {
   const params = new URLSearchParams({ page: String(decisionFilters.page), size: String(decisionFilters.size) });
-  if (decisionFilters.from) params.set("from", `${decisionFilters.from}T00:00:00Z`);
+  if (decisionFilters.from) {
+    const from = new Date(`${decisionFilters.from}T00:00:00`);
+    params.set("from", from.toISOString());
+  }
   if (decisionFilters.to) {
-    const exclusive = new Date(`${decisionFilters.to}T00:00:00Z`);
-    exclusive.setUTCDate(exclusive.getUTCDate() + 1);
+    const exclusive = new Date(`${decisionFilters.to}T00:00:00`);
+    exclusive.setDate(exclusive.getDate() + 1);
     params.set("to", exclusive.toISOString());
   }
   if (decisionFilters.trigger) params.set("trigger", decisionFilters.trigger);

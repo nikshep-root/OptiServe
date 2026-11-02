@@ -85,20 +85,50 @@ test("history renders persisted decision data and calls server pagination", asyn
   await expect(page.getByText("Page 2 of 3")).toBeVisible();
 });
 
-test("date, trigger and outcome filters use the supported API parameters", async ({ page }) => {
+test.describe("date filters use browser-local calendar boundaries", () => {
+test.use({ timezoneId: "Asia/Kolkata" });
+
+test("date, trigger and outcome filters use local instants and supported API parameters", async ({ page }) => {
   const requests = await setup(page);
-  await page.locator('input[name="from"]').fill("2026-10-01");
+  await page.locator('input[name="from"]').fill("2026-10-21");
   await page.locator('input[name="to"]').fill("2026-10-21");
   await page.locator('select[name="trigger"]').selectOption("AUTO_RECONCILIATION");
   await page.locator('select[name="outcome"]').selectOption("NO_COMPATIBLE_RESOURCE");
   await page.getByRole("button", { name: "Apply filters" }).click();
   await expect.poll(() => requests.length).toBe(2);
   const params = new URLSearchParams(requests[1].params);
-  expect(params.get("from")).toBe("2026-10-01T00:00:00Z");
-  expect(params.get("to")).toBe("2026-10-22T00:00:00.000Z");
+  expect(params.get("from")).toBe("2026-10-20T18:30:00.000Z");
+  expect(params.get("to")).toBe("2026-10-21T18:30:00.000Z");
   expect(params.get("trigger")).toBe("AUTO_RECONCILIATION");
   expect(params.get("outcome")).toBe("NO_COMPATIBLE_RESOURCE");
   expect(params.get("page")).toBe("0");
+
+  await page.getByRole("button", { name: "Clear" }).click();
+  await expect.poll(() => requests.length).toBe(3);
+  const cleared = new URLSearchParams(requests[2].params);
+  expect(cleared.has("from")).toBe(false);
+  expect(cleared.has("to")).toBe(false);
+  expect(cleared.has("trigger")).toBe(false);
+  expect(cleared.has("outcome")).toBe(false);
+  expect(cleared.get("page")).toBe("0");
+});
+
+});
+
+test.describe("date filters span local calendar days across daylight-saving changes", () => {
+  test.use({ timezoneId: "America/New_York" });
+
+  test("exclusive end uses the next local midnight across the fall DST transition", async ({ page }) => {
+    const requests = await setup(page);
+    await page.locator('input[name="from"]').fill("2026-11-01");
+    await page.locator('input[name="to"]').fill("2026-11-01");
+    await page.getByRole("button", { name: "Apply filters" }).click();
+    await expect.poll(() => requests.length).toBe(2);
+    const params = new URLSearchParams(requests[1].params);
+    expect(params.get("from")).toBe("2026-11-01T04:00:00.000Z");
+    expect(params.get("to")).toBe("2026-11-02T05:00:00.000Z");
+    expect(Date.parse(params.get("to")) - Date.parse(params.get("from"))).toBe(25 * 60 * 60 * 1000);
+  });
 });
 
 test("decision detail preserves candidate order, exact score inputs, critical precedence and recorded skip reasons", async ({ page }, testInfo) => {
