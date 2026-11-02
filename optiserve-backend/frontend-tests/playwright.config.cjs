@@ -5,6 +5,7 @@ const testUrl = `http://127.0.0.1:${testPort}`;
 module.exports = defineConfig({
   testDir: __dirname,
   testMatch: "*.spec.cjs",
+  outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR || "test-results",
   fullyParallel: true,
   reporter: "list",
   use: {
